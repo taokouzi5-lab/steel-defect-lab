@@ -24,8 +24,10 @@ if str(TRAINING_DIR) not in sys.path:
     sys.path.insert(0, str(TRAINING_DIR))
 
 import argparse
+import json
 import logging
 import time
+from datetime import datetime, timezone
 from dataclasses import replace
 from typing import Optional
 
@@ -177,6 +179,25 @@ def main(argv: Optional[list[str]] = None) -> int:
             carbon_tracker=tracker,
         )
     duration = time.perf_counter() - started_at
+
+    # Persist run metadata (checkpoint sidecar) so evaluation can attribute
+    # carbon/energy/duration/epoch totals to exactly this training session.
+    run_meta = {
+        "total_epochs": history.epochs_run,
+        "training_duration_s": round(duration, 3),
+        "energy_kwh": None,
+        "carbon_co2eq_g": None,
+        "carbon_co2eq_corrected_g": None,
+        "finished_at": datetime.now(timezone.utc).isoformat(),
+    }
+    result = getattr(tracker, "result", None)
+    if result is not None:
+        run_meta["energy_kwh"] = round(float(result.energy_kwh), 9)
+        run_meta["carbon_co2eq_g"] = round(float(result.co2eq_g), 6)
+        run_meta["carbon_co2eq_corrected_g"] = round(float(result.co2eq_corrected_g), 6)
+    run_meta_path = checkpoint_path.with_name(f"{args.model}_run.json")
+    run_meta_path.write_text(json.dumps(run_meta, indent=2), encoding="utf-8")
+    log.info("run metadata    : %s", run_meta_path)
 
     # Final evaluation of the best checkpoint on the held-out test split.
     checkpoint = torch.load(str(checkpoint_path), map_location="cpu", weights_only=True)

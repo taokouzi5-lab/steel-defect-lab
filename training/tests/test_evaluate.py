@@ -649,3 +649,28 @@ def test_main_missing_checkpoint_exits_nonzero(
     assert exit_code == 1
     assert "checkpoint does not exist" in caplog.text
     assert not (tmp_path / "metrics.json").exists()
+
+
+class TestReadRunMeta:
+    """The run-metadata sidecar supersedes the carbon-CSV heuristic."""
+
+    def test_reads_valid_sidecar(self, tmp_path: Path) -> None:
+        path = tmp_path / "resnet18_run.json"
+        path.write_text(
+            json.dumps({"total_epochs": 8, "training_duration_s": 37.7,
+                        "carbon_co2eq_g": 0.31}), encoding="utf-8")
+        assert evaluate._read_run_meta(path) == {
+            "total_epochs": 8, "training_duration_s": 37.7, "carbon_co2eq_g": 0.31}
+
+    def test_missing_sidecar_returns_empty(self, tmp_path: Path) -> None:
+        assert evaluate._read_run_meta(tmp_path / "nope.json") == {}
+
+    def test_malformed_sidecar_returns_empty(self, tmp_path: Path) -> None:
+        path = tmp_path / "bad.json"
+        path.write_text("{not json", encoding="utf-8")
+        assert evaluate._read_run_meta(path) == {}
+
+    def test_non_dict_sidecar_returns_empty(self, tmp_path: Path) -> None:
+        path = tmp_path / "list.json"
+        path.write_text("[1, 2]", encoding="utf-8")
+        assert evaluate._read_run_meta(path) == {}

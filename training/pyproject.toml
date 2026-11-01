@@ -8,8 +8,8 @@ version = "0.1.0"
 description = "Training pipeline for the DefectLens steel surface defect detection platform"
 requires-python = ">=3.10"
 dependencies = [
-    "torch>=2.1.0",
-    "torchvision>=0.16.0",
+    "torch>=2.3.0",
+    "torchvision>=0.18.0",
     "numpy>=1.24",
     "Pillow>=9.0",
     "PyYAML>=6.0",

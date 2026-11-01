@@ -11,6 +11,7 @@ htmlcov/
 training/data/
 
 # Training artifacts (metrics.json is tracked)
+metrics.json.tmp
 artifacts/checkpoints/
 artifacts/carbon/
 artifacts/onnx/

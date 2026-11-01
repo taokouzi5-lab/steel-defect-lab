@@ -122,9 +122,25 @@ def load_manifest(path: Path) -> Manifest:
     missing = [key for key in required_keys if key not in manifest]
     if missing:
         raise ValueError(f"invalid manifest {manifest_path}: missing keys {missing}")
+    class_names = manifest.get("class_names")
+    split_counts = manifest.get("split_counts")
+    if not isinstance(class_names, list) or not isinstance(split_counts, dict):
+        raise ValueError(
+            f"invalid manifest {manifest_path}: class_names/split_counts malformed"
+        )
+    if not isinstance(manifest["entries"], list):
+        raise ValueError(f"invalid manifest {manifest_path}: entries must be a list")
     for entry in manifest["entries"]:
         if not {"path", "label", "split"} <= set(entry):
             raise ValueError(f"invalid manifest entry in {manifest_path}: {entry!r}")
+        if entry["label"] not in class_names:
+            raise ValueError(
+                f"invalid manifest entry label {entry['label']!r} in {manifest_path}"
+            )
+        if entry["split"] not in split_counts:
+            raise ValueError(
+                f"invalid manifest entry split {entry['split']!r} in {manifest_path}"
+            )
     return manifest
 
 

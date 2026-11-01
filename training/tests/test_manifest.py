@@ -233,3 +233,44 @@ def test_build_manifest_different_seed_differs(tmp_path: Path, image_root: Path)
     split_a = {entry["path"]: entry["split"] for entry in manifest_a["entries"]}
     split_b = {entry["path"]: entry["split"] for entry in manifest_b["entries"]}
     assert split_a != split_b
+
+
+class TestManifestValidation:
+    """load_manifest rejects structurally invalid manifests with clear errors."""
+
+    @staticmethod
+    def _write_manifest(tmp_path: Path, entries: list, **overrides) -> Path:
+        manifest = {
+            "seed": 42,
+            "class_names": ["a", "b"],
+            "split_counts": {"train": 1, "val": 0, "test": 0},
+            "entries": entries,
+        }
+        manifest.update(overrides)
+        path = tmp_path / "bad_manifest.json"
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+        return path
+
+    def test_unknown_label_raises(self, tmp_path: Path) -> None:
+        path = self._write_manifest(
+            tmp_path, [{"path": "a/1.jpg", "label": "zzz", "split": "train"}]
+        )
+        with pytest.raises(ValueError, match="label"):
+            load_manifest(path)
+
+    def test_unknown_split_raises(self, tmp_path: Path) -> None:
+        path = self._write_manifest(
+            tmp_path, [{"path": "a/1.jpg", "label": "a", "split": "nope"}]
+        )
+        with pytest.raises(ValueError, match="split"):
+            load_manifest(path)
+
+    def test_malformed_class_names_raises(self, tmp_path: Path) -> None:
+        path = self._write_manifest(tmp_path, [], class_names="nope")
+        with pytest.raises(ValueError, match="malformed"):
+            load_manifest(path)
+
+    def test_entries_not_list_raises(self, tmp_path: Path) -> None:
+        path = self._write_manifest(tmp_path, "nope")
+        with pytest.raises(ValueError, match="entries must be a list"):
+            load_manifest(path)

@@ -179,6 +179,25 @@ def _write_metrics_json(path: Path, data: dict[str, Any]) -> None:
         raise
 
 
+def _read_run_meta(path: Path) -> dict[str, Any]:
+    """Read the training run-metadata sidecar written by train.py (or ``{}``).
+
+    The sidecar attributes carbon/energy/duration/epoch totals to the exact
+    training session that produced the checkpoint; it supersedes the
+    best-effort carbon-CSV heuristic (whose "last row" assumption breaks when
+    the same model is trained more than once).
+    """
+    if not path.is_file():
+        return {}
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        log.warning("could not parse run metadata %s; falling back", path)
+        return {}
+
+
 def _read_carbon_csv(path: Path) -> float | None:
     """Emissions (g CO2eq) from a CodeCarbon emissions CSV, or None.
 
@@ -259,6 +278,7 @@ def _build_entry(
     carbon_co2eq_g: float | None,
     training_duration_s: float | None,
     trained_at: str,
+    training_epochs: int | None = None,
 ) -> dict[str, Any]:
     """Assemble the per-model entry persisted in artifacts/metrics.json."""
     metrics = checkpoint.get("metrics")
@@ -274,7 +294,9 @@ def _build_entry(
             for name, value in test_metrics["per_class_f1"].items()
         },
         "confusion_matrix": test_metrics["confusion_matrix"].tolist(),
-        "training_epochs": checkpoint.get("epoch"),
+        "training_epochs": training_epochs
+        if training_epochs is not None
+        else checkpoint.get("epoch"),
         "best_val_macro_f1": round(float(best_val_macro_f1), METRIC_DECIMALS)
         if best_val_macro_f1 is not None
         else None,
@@ -463,8 +485,16 @@ def _run(args: argparse.Namespace) -> int:
     log.info("evaluated %d test samples on %s", y_true.size, device.type)
 
     test_metrics, per_class = _compute_report_metrics(y_true, y_pred, class_names)
-    carbon_g = _read_carbon_csv(CARBON_DIR / f"B_defectlens_{args.model}_emissions.csv")
-    duration_s = _extract_training_duration(checkpoint)
+    run_meta = _read_run_meta(Path(args.checkpoint).parent / f"{args.model}_run.json")
+    carbon_g = run_meta.get("carbon_co2eq_g")
+    if carbon_g is None:
+        carbon_g = _read_carbon_csv(CARBON_DIR / f"B_defectlens_{args.model}_emissions.csv")
+    duration_s = run_meta.get("training_duration_s")
+    if duration_s is None:
+        duration_s = _extract_training_duration(checkpoint)
+    training_epochs = run_meta.get("total_epochs")
+    if training_epochs is None:
+        training_epochs = checkpoint.get("epoch")
     trained_at = _iso_timestamp(args.checkpoint.stat().st_mtime)
 
     entry = _build_entry(
@@ -474,6 +504,7 @@ def _run(args: argparse.Namespace) -> int:
         carbon_co2eq_g=carbon_g,
         training_duration_s=duration_s,
         trained_at=trained_at,
+        training_epochs=training_epochs,
     )
 
     updated = _update_metrics_json(_read_metrics_json(METRICS_PATH), args.model, entry)
