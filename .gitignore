@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Dataset junction (NEU-DET images live outside this repo)
+training/data/
+
+# Training artifacts (metrics.json is tracked)
+artifacts/checkpoints/
+artifacts/onnx/
+*.onnx
+*.pt
+*.pth
+*.ckpt
+
+# Frontend (stage 4)
+node_modules/
+dist/
+
+# Environments / editors
+.venv/
+venv/
+.vscode/
+.idea/
