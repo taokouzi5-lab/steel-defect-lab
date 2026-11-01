@@ -67,6 +67,74 @@
       "carbon_co2eq_g": 0.3085,
       "training_duration_s": null,
       "trained_at": "2026-11-01T16:43:35.668574+00:00"
+    },
+    "resnet50": {
+      "params": 23520326,
+      "test_acc": 0.9889,
+      "test_macro_f1": 0.9889,
+      "per_class_f1": {
+        "crazing": 1.0,
+        "inclusion": 0.9677,
+        "patches": 1.0,
+        "pitted_surface": 1.0,
+        "rolled-in_scale": 1.0,
+        "scratches": 0.9655
+      },
+      "confusion_matrix": [
+        [
+          30,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          30,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          30,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          30,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          30,
+          0
+        ],
+        [
+          0,
+          2,
+          0,
+          0,
+          0,
+          28
+        ]
+      ],
+      "training_epochs": 2,
+      "best_val_macro_f1": 1.0,
+      "carbon_co2eq_g": 0.4511,
+      "training_duration_s": null,
+      "trained_at": "2026-11-01T16:44:38.426137+00:00"
     }
   }
 }
