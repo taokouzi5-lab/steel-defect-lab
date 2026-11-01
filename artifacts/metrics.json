@@ -62,11 +62,26 @@
           29
         ]
       ],
-      "training_epochs": 4,
+      "training_epochs": 8,
       "best_val_macro_f1": 1.0,
       "carbon_co2eq_g": 0.3085,
-      "training_duration_s": null,
-      "trained_at": "2026-11-01T16:43:35.668574+00:00"
+      "training_duration_s": 37.7,
+      "trained_at": "2026-11-01T16:43:35.668574+00:00",
+      "onnx_fp32_size_mb": 42.6377,
+      "onnx_int8_size_mb": 10.7735,
+      "int8_top1_drop_pt": 0.0,
+      "cpu_latency_ms": {
+        "fp32": {
+          "p50": 9.317,
+          "p95": 10.322
+        },
+        "int8": {
+          "p50": 10.141,
+          "p95": 11.449
+        }
+      },
+      "quantization": "static",
+      "quantized_at": "2026-11-01T17:37:56.117085+00:00"
     },
     "resnet50": {
       "params": 23520326,
@@ -130,11 +145,26 @@
           28
         ]
       ],
-      "training_epochs": 2,
+      "training_epochs": 6,
       "best_val_macro_f1": 1.0,
       "carbon_co2eq_g": 0.4511,
-      "training_duration_s": null,
-      "trained_at": "2026-11-01T16:44:38.426137+00:00"
+      "training_duration_s": 46.0,
+      "trained_at": "2026-11-01T16:44:38.426137+00:00",
+      "onnx_fp32_size_mb": 89.6449,
+      "onnx_int8_size_mb": 22.9146,
+      "int8_top1_drop_pt": 1.1111,
+      "cpu_latency_ms": {
+        "fp32": {
+          "p50": 21.903,
+          "p95": 25.098
+        },
+        "int8": {
+          "p50": 20.346,
+          "p95": 21.729
+        }
+      },
+      "quantization": "static",
+      "quantized_at": "2026-11-01T17:38:42.506939+00:00"
     }
   }
 }

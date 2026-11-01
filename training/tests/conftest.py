@@ -9,6 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import torch
+from torch import nn
 
 from steel_training.data.manifest import Manifest, build_manifest
 
@@ -102,3 +104,45 @@ class FakeCarbonTracker:
 def fake_carbon_tracker() -> type[FakeCarbonTracker]:
     """Factory fixture returning the :class:`FakeCarbonTracker` class."""
     return FakeCarbonTracker
+
+
+class TinyCNN(nn.Module):
+    """Tiny random-weight CNN (6 classes) for ONNX export/quantization tests.
+
+    Uses ``AdaptiveAvgPool2d`` so the same weights accept any input size,
+    which lets the production export path (static 224x224 input) be tested
+    with a model that exports in well under a second.
+    """
+
+    def __init__(self, num_classes: int = 6) -> None:
+        super().__init__()
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 8, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(8, 8, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool2d(1),
+        )
+        self.classifier = nn.Linear(8, num_classes)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.classifier(torch.flatten(self.features(x), 1))
+
+
+@pytest.fixture(scope="session")
+def tiny_cnn_model() -> nn.Module:
+    """A random-weight :class:`TinyCNN` (seed fixed for reproducibility)."""
+    torch.manual_seed(0)
+    return TinyCNN(6)
+
+
+@pytest.fixture(scope="session")
+def tiny_fp32_onnx(
+    tmp_path_factory: pytest.TempPathFactory, tiny_cnn_model: nn.Module
+) -> Path:
+    """A tiny FP32 ONNX model exported through the production export path."""
+    from scripts import export_onnx
+
+    path = tmp_path_factory.mktemp("onnx-artifacts") / "tiny_fp32.onnx"
+    export_onnx.export_to_onnx(tiny_cnn_model, path)
+    return path

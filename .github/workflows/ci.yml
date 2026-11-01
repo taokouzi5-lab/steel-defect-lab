@@ -23,14 +23,17 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install training package with dev extras (CPU torch)
+      - name: Install PyTorch CPU wheels
+        run: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install training package with dev extras
         # Aliyun mirror for speed in mainland China; PyPI as fallback source.
         run: pip install -e "training/.[dev]" --index-url https://mirrors.aliyun.com/pypi/simple/ --extra-index-url https://pypi.org/simple/
 
       - name: Lint with ruff
         run: ruff check training
 
-      - name: Security scan with bandit (medium severity and above)
+      - name: Security scan with bandit (-ll: low severity and above)
         run: bandit -r training/steel_training training/scripts -ll -q
 
       - name: Tests (CPU-only; GPU smoke test skipped)
