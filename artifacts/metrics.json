@@ -1,0 +1,72 @@
+{
+  "models": {
+    "resnet18": {
+      "params": 11179590,
+      "test_acc": 0.9944,
+      "test_macro_f1": 0.9944,
+      "per_class_f1": {
+        "crazing": 1.0,
+        "inclusion": 0.9836,
+        "patches": 1.0,
+        "pitted_surface": 1.0,
+        "rolled-in_scale": 1.0,
+        "scratches": 0.9831
+      },
+      "confusion_matrix": [
+        [
+          30,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          30,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          30,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          30,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          30,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0,
+          0,
+          29
+        ]
+      ],
+      "training_epochs": 4,
+      "best_val_macro_f1": 1.0,
+      "carbon_co2eq_g": 0.3085,
+      "training_duration_s": null,
+      "trained_at": "2026-11-01T16:43:35.668574+00:00"
+    }
+  }
+}
