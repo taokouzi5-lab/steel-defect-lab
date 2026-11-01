@@ -1,0 +1,14 @@
+# Training configuration for the ResNet50 steel defect classifier.
+# Loaded by scripts/train.py via steel_training.engine.trainer.load_config.
+model_name: resnet50
+batch_size: 16
+lr_fc: 0.001
+lr_backbone: 0.0001
+epochs: 20
+warmup_epochs: 2
+patience: 4
+amp: true
+weight_decay: 0.0001
+num_workers: 2
+seed: 42
+monitor: val_macro_f1

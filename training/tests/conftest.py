@@ -41,3 +41,64 @@ def dataset_files(image_root: Path) -> set[str]:
                 if image.is_file() and image.suffix.lower() in (".jpg", ".jpeg", ".png"):
                     files.add(f"{class_dir.name}/{image.name}")
     return files
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture()
+def repo_root() -> Path:
+    """Repository root (parent of the ``training`` package)."""
+    return REPO_ROOT
+
+
+@pytest.fixture()
+def manifest_path(repo_root: Path) -> Path:
+    """Path of the committed training manifest (training/manifest.json)."""
+    path = repo_root / "training" / "manifest.json"
+    if not path.is_file():
+        pytest.skip("training/manifest.json is not present in this checkout")
+    return path
+
+
+@pytest.fixture()
+def pretrained_dir(repo_root: Path) -> Path:
+    """Directory holding locally cached ImageNet weights (artifacts)."""
+    return repo_root / "artifacts" / "checkpoints" / "pretrained"
+
+
+@pytest.fixture()
+def configs_dir(repo_root: Path) -> Path:
+    """Directory holding the committed training configs (training/configs)."""
+    return repo_root / "training" / "configs"
+
+
+class FakeCarbonTracker:
+    """Stand-in for CarbonTracker that never touches CodeCarbon.
+
+    Records every ``start``/``stop`` call so tests can assert how the
+    training engine interacts with the tracker. ``is_active`` mirrors the
+    state a real tracker has while running inside its context manager.
+    """
+
+    def __init__(self, active: bool = False) -> None:
+        self.calls: list[str] = []
+        self._active = active
+        self.result: dict[str, float] | None = {"co2eq_g": 1.5}
+
+    @property
+    def is_active(self) -> bool:
+        return self._active
+
+    def start(self) -> None:
+        self.calls.append("start")
+
+    def stop(self) -> None:
+        self.calls.append("stop")
+        self.result = {"co2eq_g": 1.5}
+
+
+@pytest.fixture()
+def fake_carbon_tracker() -> type[FakeCarbonTracker]:
+    """Factory fixture returning the :class:`FakeCarbonTracker` class."""
+    return FakeCarbonTracker

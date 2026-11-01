@@ -1,3 +1,5 @@
-"""Model definitions subpackage (ResNet backbones, heads). Planned."""
+"""Model definitions: ResNet backbones, heads, and parameter splitting."""
 
-__all__: list[str] = []
+from steel_training.models.factory import SUPPORTED_MODELS, create_resnet, split_params
+
+__all__ = ["SUPPORTED_MODELS", "create_resnet", "split_params"]

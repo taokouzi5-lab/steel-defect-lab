@@ -29,6 +29,9 @@ include = ["steel_training*"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-ra"
+markers = [
+    "slow: long-running tests (GPU overfit smoke, real weight loading)",
+]
 
 [tool.ruff]
 line-length = 100
@@ -36,3 +39,7 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+# Scripts bootstrap sys.path before importing the sibling package.
+"scripts/*.py" = ["E402"]

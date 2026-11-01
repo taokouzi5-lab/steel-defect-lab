@@ -1,3 +1,5 @@
-"""Evaluation subpackage (metrics, confusion matrix, reports). Planned."""
+"""Evaluation subpackage: metrics, confusion matrix, reports."""
 
-__all__: list[str] = []
+from steel_training.eval.metrics import accuracy, confusion_matrix_counts, macro_f1
+
+__all__ = ["accuracy", "confusion_matrix_counts", "macro_f1"]

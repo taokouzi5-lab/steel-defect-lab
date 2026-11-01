@@ -12,6 +12,7 @@ training/data/
 
 # Training artifacts (metrics.json is tracked)
 artifacts/checkpoints/
+artifacts/carbon/
 artifacts/onnx/
 *.onnx
 *.pt
