@@ -38,3 +38,29 @@ jobs:
 
       - name: Tests (CPU-only; GPU smoke test skipped)
         run: pytest training/tests -q -m "not slow" --cov=steel_training --cov-report=term-missing --cov-fail-under=60
+
+  backend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PyTorch CPU wheels
+        run: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install backend with dev extras
+        # Aliyun mirror for speed in mainland China; PyPI as fallback source.
+        run: pip install -e "backend/.[dev]" --index-url https://mirrors.aliyun.com/pypi/simple/ --extra-index-url https://pypi.org/simple/
+
+      - name: Lint with ruff
+        run: ruff check backend
+
+      - name: Security scan with bandit (-ll: low severity and above)
+        run: bandit -r backend/app -ll -q
+
+      - name: Tests (CPU-only; artifact-dependent tests skip)
+        run: cd backend && pytest tests -q -m "not slow" --cov=app --cov-report=term-missing --cov-fail-under=70
