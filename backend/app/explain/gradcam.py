@@ -125,19 +125,24 @@ class GradCAM:
 
     # -- core algorithm -----------------------------------------------------
 
-    def compute(self, input_tensor: torch.Tensor) -> np.ndarray:
+    def compute(self, input_tensor: torch.Tensor, target_class: int | None = None) -> np.ndarray:
         """Compute the normalized Grad-CAM heatmap for a single image.
 
         Args:
             input_tensor: a ``[1, channels, height, width]`` floating-point
                 tensor on the same device as the model.
+            target_class: optional explicit class index to explain (e.g. the
+                class predicted by a separately served model such as an ONNX
+                export). ``None`` (default) uses the argmax of this model's
+                own output, preserving the original behavior.
 
         Returns:
             A ``[height, width]`` float32 numpy array with values in [0, 1].
 
         Raises:
-            ValueError: for invalid input shapes/dtypes or for model outputs
-                that are neither a scalar nor ``[1, num_classes]`` logits.
+            ValueError: for invalid input shapes/dtypes, for a non-int or
+                out-of-range ``target_class``, or for model outputs that are
+                neither a scalar nor ``[1, num_classes]`` logits.
             RuntimeError: if backpropagation produces no gradient at the
                 target layer.
         """
@@ -159,7 +164,7 @@ class GradCAM:
             x = input_tensor.detach()
             x.requires_grad_(True)
             output = self._model(x)
-            class_score = self._predicted_class_score(output)
+            class_score = self._class_score(output, target_class)
             self._model.zero_grad(set_to_none=True)
             class_score.backward()
             if self._gradients is None:
@@ -195,6 +200,22 @@ class GradCAM:
             "model output must be a scalar or [1, num_classes] logits, "
             f"got shape {tuple(output.shape)}"
         )
+
+    def _class_score(self, output: torch.Tensor, target_class: int | None) -> torch.Tensor:
+        if target_class is None:
+            return self._predicted_class_score(output)
+        if not isinstance(target_class, int) or isinstance(target_class, bool):
+            raise ValueError(f"target_class must be an int or None, got {target_class!r}")
+        if output.ndim != 2 or output.shape[0] != 1:
+            raise ValueError(
+                "target_class requires [1, num_classes] logits output, "
+                f"got shape {tuple(output.shape)}"
+            )
+        if not 0 <= target_class < output.shape[1]:
+            raise ValueError(
+                f"target_class {target_class} is out of range for {output.shape[1]} classes"
+            )
+        return output[0, target_class]
 
 
 # ---------------------------------------------------------------------------

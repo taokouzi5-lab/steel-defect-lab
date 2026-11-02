@@ -1,0 +1,73 @@
+{
+  "source": "NEU-DET public dataset, test split (2 images per class)",
+  "class_names": [
+    "crazing",
+    "inclusion",
+    "patches",
+    "pitted_surface",
+    "rolled-in_scale",
+    "scratches"
+  ],
+  "samples": [
+    {
+      "id": "crazing_101",
+      "label": "crazing",
+      "name": "crazing_101.jpg"
+    },
+    {
+      "id": "crazing_11",
+      "label": "crazing",
+      "name": "crazing_11.jpg"
+    },
+    {
+      "id": "inclusion_117",
+      "label": "inclusion",
+      "name": "inclusion_117.jpg"
+    },
+    {
+      "id": "inclusion_121",
+      "label": "inclusion",
+      "name": "inclusion_121.jpg"
+    },
+    {
+      "id": "patches_134",
+      "label": "patches",
+      "name": "patches_134.jpg"
+    },
+    {
+      "id": "patches_136",
+      "label": "patches",
+      "name": "patches_136.jpg"
+    },
+    {
+      "id": "pitted_surface_123",
+      "label": "pitted_surface",
+      "name": "pitted_surface_123.jpg"
+    },
+    {
+      "id": "pitted_surface_126",
+      "label": "pitted_surface",
+      "name": "pitted_surface_126.jpg"
+    },
+    {
+      "id": "rolled-in_scale_102",
+      "label": "rolled-in_scale",
+      "name": "rolled-in_scale_102.jpg"
+    },
+    {
+      "id": "rolled-in_scale_132",
+      "label": "rolled-in_scale",
+      "name": "rolled-in_scale_132.jpg"
+    },
+    {
+      "id": "scratches_122",
+      "label": "scratches",
+      "name": "scratches_122.jpg"
+    },
+    {
+      "id": "scratches_126",
+      "label": "scratches",
+      "name": "scratches_126.jpg"
+    }
+  ]
+}

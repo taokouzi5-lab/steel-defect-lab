@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 import torch
+from fastapi.testclient import TestClient
 from torch import nn
 
 # Make `app` importable no matter which ini file governs the run: when the
@@ -114,4 +115,88 @@ def macef_results_dir() -> Path:
     path = REPO_ROOT.parent / "carbon_benchmark" / "results"
     if not path.is_dir():
         pytest.skip("mace-f benchmark results are not present on this machine")
+    return path
+
+
+# ---------------------------------------------------------------------------
+# T3.5/T3.6 FastAPI service fixtures
+# ---------------------------------------------------------------------------
+
+TEST_FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
+
+
+@pytest.fixture(autouse=True)
+def _fastapi_env_defaults(monkeypatch):
+    """Keep tests fast and deterministic: no model preload, no rate limiting.
+
+    Individual tests that exercise preloading or rate limiting re-enable the
+    feature by setting the env var again (the same function-scoped
+    ``monkeypatch`` instance is used, so the later ``setenv`` wins) before
+    creating their own app.
+    """
+    monkeypatch.setenv("PRELOAD_MODELS", "0")
+    monkeypatch.setenv("RATE_LIMIT_ENABLED", "0")
+
+
+@pytest.fixture()
+def fixtures_dir() -> Path:
+    return TEST_FIXTURES_DIR
+
+
+@pytest.fixture()
+def client():
+    """A TestClient around a fresh app (no preload, rate limiting disabled)."""
+    from app.config import Settings
+    from app.main import create_app
+
+    app = create_app(Settings.from_env())
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+@pytest.fixture()
+def make_client():
+    """Factory: build a TestClient from an explicit Settings instance."""
+
+    def _make(settings):
+        from app.main import create_app
+
+        app = create_app(settings)
+        return TestClient(app)
+
+    return _make
+
+
+@pytest.fixture()
+def sample_assets_dir() -> Path:
+    """Directory of the committed demo samples (12 NEU-DET test images)."""
+    path = BACKEND_ROOT / "app" / "assets" / "samples"
+    if not path.is_dir():
+        pytest.skip("backend/app/assets/samples is not present in this checkout")
+    return path
+
+
+@pytest.fixture()
+def sample_crazing_bytes(sample_assets_dir) -> bytes:
+    image = sample_assets_dir / "crazing" / "crazing_101.jpg"
+    if not image.is_file():
+        pytest.skip(f"sample image missing: {image}")
+    return image.read_bytes()
+
+
+@pytest.fixture()
+def real_onnx_dir() -> Path:
+    """Repository ONNX artifacts (generated, not tracked — skip if absent)."""
+    path = REPO_ROOT / "artifacts" / "onnx"
+    if not path.is_dir() or not (path / "resnet18_int8_static.onnx").is_file():
+        pytest.skip("ONNX artifacts are not present in this checkout")
+    return path
+
+
+@pytest.fixture()
+def real_metrics_path() -> Path:
+    """Repository metrics.json (generated, not tracked — skip if absent)."""
+    path = REPO_ROOT / "artifacts" / "metrics.json"
+    if not path.is_file():
+        pytest.skip("artifacts/metrics.json is not present in this checkout")
     return path

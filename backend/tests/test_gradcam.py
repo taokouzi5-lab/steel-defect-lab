@@ -289,6 +289,50 @@ def test_heatmap_to_base64_png_roundtrip_matches_overlay():
 
 
 # ---------------------------------------------------------------------------
+# Explicit target class (T3.6): Grad-CAM for the ONNX-predicted class
+# ---------------------------------------------------------------------------
+
+
+def test_compute_with_target_class_matches_argmax_result(tiny_model, sample_input):
+    cam = GradCAM(tiny_model, tiny_model.conv2)
+    predicted = int(tiny_model(sample_input).argmax(dim=1).item())
+    default_map = cam.compute(sample_input)
+    targeted_map = cam.compute(sample_input, target_class=predicted)
+    assert np.allclose(default_map, targeted_map)
+
+
+def test_compute_with_different_target_class_changes_heatmap(tiny_model, sample_input):
+    cam = GradCAM(tiny_model, tiny_model.conv2)
+    first = cam.compute(sample_input, target_class=0)
+    second = cam.compute(sample_input, target_class=3)
+    assert not np.allclose(first, second)
+
+
+def test_compute_rejects_target_class_out_of_range(tiny_model, sample_input):
+    cam = GradCAM(tiny_model, tiny_model.conv2)
+    with pytest.raises(ValueError, match="target_class"):
+        cam.compute(sample_input, target_class=6)
+    with pytest.raises(ValueError, match="target_class"):
+        cam.compute(sample_input, target_class=-1)
+    with pytest.raises(ValueError, match="target_class"):
+        cam.compute(sample_input, target_class="0")  # type: ignore[arg-type]
+
+
+def test_compute_rejects_target_class_with_scalar_output(tiny_model, sample_input):
+    class ScalarModel(nn.Module):
+        def __init__(self, base: nn.Module) -> None:
+            super().__init__()
+            self.conv2 = base.conv2
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return x.sum()
+
+    cam = GradCAM(ScalarModel(tiny_model), ScalarModel(tiny_model).conv2)
+    with pytest.raises(ValueError, match="logits"):
+        cam.compute(sample_input, target_class=0)
+
+
+# ---------------------------------------------------------------------------
 # Slow regression: real resnet18 checkpoint on a real crazing image
 # ---------------------------------------------------------------------------
 
