@@ -15,6 +15,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.core.sanitize import sanitize_text
+
 logger = logging.getLogger(__name__)
 
 # Conservative filename/label whitelist: no separators, no traversal.
@@ -58,7 +60,7 @@ class SampleCatalog:
                 continue
             if info is None or info.id in seen_ids:
                 if info is not None:
-                    logger.warning("skipping duplicate sample id '%s'", info.id)
+                    logger.warning("skipping duplicate sample id '%s'", sanitize_text(info.id))
                 continue
             if not self.path_of(info).is_file():
                 logger.warning("sample file %s is missing; skipping", self.path_of(info))
@@ -73,14 +75,16 @@ class SampleCatalog:
         name = str(entry["name"])
         label = str(entry["label"])
         # Security: reject anything that could escape the samples directory.
+        # Sanitized before logging: manifest content is logged verbatim
+        # nowhere (L1 control-character scrubbing).
         if not _COMPONENT_PATTERN.match(sample_id):
-            logger.warning("skipping sample with unsafe id %r", sample_id)
+            logger.warning("skipping sample with unsafe id %r", sanitize_text(sample_id))
             return None
         if not _COMPONENT_PATTERN.match(name):
-            logger.warning("skipping sample with unsafe name %r", name)
+            logger.warning("skipping sample with unsafe name %r", sanitize_text(name))
             return None
         if not _COMPONENT_PATTERN.match(label):
-            logger.warning("skipping sample with unsafe label %r", label)
+            logger.warning("skipping sample with unsafe label %r", sanitize_text(label))
             return None
         return SampleInfo(id=sample_id, name=name, label=label)
 

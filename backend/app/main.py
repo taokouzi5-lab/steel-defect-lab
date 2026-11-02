@@ -26,6 +26,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api import routes
 from app.config import Settings, set_active_settings
 from app.core import envelope
+from app.core.body_limit import BodySizeLimitMiddleware
 from app.core.errors import AppError
 from app.core.rate_limit import limiter
 from app.inference.model_registry import ModelRegistry
@@ -37,6 +38,10 @@ from app.services.sample_catalog import SampleCatalog
 logger = logging.getLogger(__name__)
 
 _VALID_CLIENT_REQUEST_ID = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+
+# Multipart framing overhead allowance on top of the file cap: boundary,
+# content-disposition headers and form fields must fit too.
+_MULTIPART_OVERHEAD_BYTES = 1024 * 1024
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -58,6 +63,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description="Steel surface defect classification with Grad-CAM "
         "explainability and carbon estimation.",
         lifespan=lifespan,
+        docs_url="/docs" if settings.enable_docs else None,
+        redoc_url="/redoc" if settings.enable_docs else None,
+        openapi_url="/openapi.json" if settings.enable_docs else None,
     )
 
     # -- application state ------------------------------------------------
@@ -89,6 +97,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+
+    # -- request body precheck (H1) -----------------------------------------
+    # Starlette spools multipart bodies to a SpooledTemporaryFile (disk past
+    # ~1 MB) before app validation runs, so reject declared-oversized bodies
+    # from the Content-Length header alone, before any parsing. Chunked
+    # bodies without Content-Length are a residual risk bounded by the
+    # stream cap in app.core.validation.
+    app.add_middleware(
+        BodySizeLimitMiddleware,
+        max_bytes=settings.max_upload_bytes() + _MULTIPART_OVERHEAD_BYTES,
+    )
 
     # -- exception handlers ------------------------------------------------
     app.add_exception_handler(AppError, _app_error_handler)

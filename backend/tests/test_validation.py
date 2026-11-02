@@ -158,6 +158,30 @@ def test_max_image_pixels_constant_covers_4096_square():
     assert validation.MAX_IMAGE_PIXELS == 4096 * 4096
 
 
+def test_pixel_budget_is_checked_before_full_decode(monkeypatch):
+    # The pixel budget must be enforced on the image header (second open)
+    # BEFORE image.load() decodes the full pixel buffer: verify() alone is
+    # the only decode performed when the budget rejects the image.
+    from PIL import ImageFile
+
+    png = _png_bytes(20, 20)  # 400 px
+    monkeypatch.setattr(validation, "MAX_IMAGE_PIXELS", 100)
+
+    loads: list[tuple[int, int]] = []
+    original_load = ImageFile.ImageFile.load
+
+    def spy_load(self):
+        loads.append(self.size)
+        return original_load(self)
+
+    monkeypatch.setattr(ImageFile.ImageFile, "load", spy_load)
+    with pytest.raises(UnprocessableImageError) as excinfo:
+        validation.validate_upload(png, ONE_MB)
+
+    assert "pixel" in str(excinfo.value)
+    assert loads == [], "the budget check must pre-empt every full pixel decode"
+
+
 # ---------------------------------------------------------------------------
 # EXIF transposition
 # ---------------------------------------------------------------------------

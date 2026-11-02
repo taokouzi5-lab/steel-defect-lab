@@ -5,13 +5,19 @@ Checks, in order (cheapest first):
 1. size cap (413) — streamed, stops reading past the cap;
 2. magic-byte whitelist (415) — JPEG ``FF D8 FF`` / PNG ``89 50 4E 47``;
    the file extension is never trusted;
-3. Pillow ``verify()`` + reopen + full ``load()`` decode (422) — catches
-   truncated and fake files; ``Image.DecompressionBombError`` also maps to
-   422 (Pillow's own guard is lowered to 4096x4096 at import);
+3. Pillow ``verify()`` + reopen + pixel-budget check *before* the full
+   ``load()`` decode (422) — catches truncated and fake files and rejects
+   oversized images without paying the decode cost;
+   ``Image.DecompressionBombError`` also maps to 422 (Pillow's own guard is
+   lowered to 4096x4096 at import);
 4. EXIF transposition (orientation tag applied, not ignored);
 5. conversion to RGB.
 
-The entire pipeline is memory-only: no temporary files are ever written.
+The application-level pipeline is memory-only: this code never writes
+files. One layer up, Starlette's multipart parser may spool request bodies
+larger than ~1 MB into a ``SpooledTemporaryFile`` on disk before this code
+runs; the HTTP layer's Content-Length precheck (``app.core.body_limit``,
+wired in ``app.main``) rejects oversized uploads before that parsing starts.
 """
 
 from __future__ import annotations
@@ -81,8 +87,13 @@ def _detect_format(data: bytes) -> str:
     raise UnsupportedMediaTypeError("file content does not start with a JPEG or PNG signature")
 
 
-def _decode(data: bytes, image_format: str) -> Image.Image:
-    """verify() + reopen + full decode (double-decode hardening)."""
+def _decode(data: bytes, image_format: str, budget: int) -> Image.Image:
+    """verify() + reopen + pixel-budget check before the full decode.
+
+    The budget is enforced on the image header as soon as the second open
+    succeeds and *before* ``load()`` decodes the pixel buffer, so oversized
+    images are rejected without paying the decode cost.
+    """
     try:
         with Image.open(io.BytesIO(data)) as probe:
             probe.verify()  # integrity check without full pixel decode
@@ -94,8 +105,16 @@ def _decode(data: bytes, image_format: str) -> Image.Image:
 
     try:
         image = Image.open(io.BytesIO(data))
+        width, height = image.size
+        if width * height > budget:
+            raise UnprocessableImageError(
+                f"image is {width}x{height} ({width * height} px), exceeding the "
+                f"{budget}-pixel limit"
+            )
         image.load()  # force the full decode so truncation cannot hide
         return image
+    except UnprocessableImageError:
+        raise
     except Image.DecompressionBombError as exc:
         raise UnprocessableImageError("image exceeds the decompression-bomb pixel limit") from exc
     except Exception as exc:
@@ -114,7 +133,7 @@ def validate_upload(
         data: the raw upload bytes (already read from the stream).
         max_bytes: the size cap; exceeding it raises 413.
         max_pixels: pixel budget (defaults to :data:`MAX_IMAGE_PIXELS`);
-            exceeding it raises 422.
+            exceeding it raises 422, enforced before the full decode.
 
     Raises:
         PayloadTooLargeError: 413, upload too large.
@@ -127,14 +146,8 @@ def validate_upload(
         )
 
     image_format = _detect_format(data)
-    image = _decode(data, image_format)
-
-    width, height = image.size
     budget = max_pixels if max_pixels is not None else MAX_IMAGE_PIXELS
-    if width * height > budget:
-        raise UnprocessableImageError(
-            f"image is {width}x{height} ({width * height} px), exceeding the {budget}-pixel limit"
-        )
+    image = _decode(data, image_format, budget)
 
     image = ImageOps.exif_transpose(image)  # apply EXIF orientation
     return ValidatedImage(

@@ -2,16 +2,19 @@
 
 - Whitelist: resnet18/resnet50 x fp32/int8 — anything else is a 404.
 - Lazy session loading; a model whose artifact is missing or that fails to
-  initialize surfaces as 503 (model known, not serving).
+  initialize surfaces as 503 (model known, not serving) with a generic
+  client message — the full path stays in the server log.
 - Preprocessing is pure numpy+PIL and mirrors the training eval pipeline
-  (``Resize(224)`` = shorter side to 224, then a center crop to the fixed
-  224x224 graph input; the crop is a no-op for the square NEU-DET domain).
-- Session.run is executed with a configurable timeout.
+  (``Resize(224)`` = shorter side to 224, truncated to int exactly like
+  torchvision, then a center crop to the fixed 224x224 graph input).
+- Session.run is executed with a configurable timeout, and concurrent
+  inferences are bounded by a process-lifetime executor + semaphore.
 """
 
 from __future__ import annotations
 
 import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +25,7 @@ import onnxruntime as ort
 from PIL import Image
 
 from app.core.errors import InferenceTimeoutError, ModelNotFoundError, ModelNotReadyError
+from app.core.sanitize import sanitize_text
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +38,20 @@ _QUANT_FILE_SUFFIX = {"fp32": "fp32", "int8": "int8_static"}
 INPUT_SIZE = 224
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
+
+# -- bounded inference execution (M5) ----------------------------------------
+# session.run is CPU-bound but releases the GIL, so concurrent requests can
+# oversubscribe the host. Bound them: one process-lifetime executor whose
+# worker count equals the semaphore, admitting at most 2 in-flight
+# inferences at any time. The executor is never shut down — a timeout cannot
+# cancel an in-flight session.run (threads are not cooperatively
+# cancellable), so the bounded singleton caps how many threads stuck calls
+# can occupy for the life of the process.
+_MAX_CONCURRENT_INFERENCES = 2
+_INFERENCE_EXECUTOR = ThreadPoolExecutor(
+    max_workers=_MAX_CONCURRENT_INFERENCES, thread_name_prefix="defectlens-inference"
+)
+_INFERENCE_SLOTS = threading.Semaphore(_MAX_CONCURRENT_INFERENCES)
 
 
 @dataclass(frozen=True)
@@ -69,8 +87,8 @@ class OnnxEngine:
         parts = model_id.split("-") if isinstance(model_id, str) else []
         if len(parts) != 2 or parts[0] not in ARCHS or parts[1] not in QUANTS:
             raise ModelNotFoundError(
-                f"unknown model id '{model_id}'; expected <arch>-<quant> with arch in "
-                f"{ARCHS} and quant in {QUANTS}"
+                f"unknown model id '{sanitize_text(model_id)}'; expected <arch>-<quant> "
+                f"with arch in {ARCHS} and quant in {QUANTS}"
             )
         return parts[0], parts[1]
 
@@ -90,9 +108,10 @@ class OnnxEngine:
 
         path = self._model_dir / self.model_filename(model_id)
         if not path.is_file():
-            raise ModelNotReadyError(
-                f"onnx artifact '{path.name}' is missing from {self._model_dir}"
-            )
+            # Full path goes to the server log only; the client message is
+            # generic so no filesystem layout leaks (M1).
+            logger.warning("onnx artifact %s is missing from %s", path.name, self._model_dir)
+            raise ModelNotReadyError("model artifact not ready")
         try:
             session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
         except Exception as exc:
@@ -125,17 +144,22 @@ class OnnxEngine:
         """Convert an RGB PIL image to a float32 ``[1, 3, 224, 224]`` tensor.
 
         Mirrors the training eval transform (Resize(224) = shorter side to
-        224) and center-crops to the graph's fixed 224x224 input; for the
-        square NEU-DET domain the crop is a no-op, so results are identical
-        to the training pipeline.
+        224). The scaled size is truncated to int exactly like torchvision
+        (``int(scale * side)``, not rounding), and the result is center
+        cropped to the graph's fixed 224x224 input.
+
+        Alignment contract: in the square NEU-DET domain the crop is a no-op
+        and results are bit-exact with the training pipeline. For non-square
+        inputs this is a conventional resize+crop handling, not a
+        bit-for-bit guarantee.
         """
         if not isinstance(image, Image.Image):
             raise TypeError(f"image must be a PIL Image, got {type(image).__name__}")
         rgb = image.convert("RGB")
         width, height = rgb.size
         scale = INPUT_SIZE / min(width, height)
-        new_width = max(INPUT_SIZE, round(width * scale))
-        new_height = max(INPUT_SIZE, round(height * scale))
+        new_width = max(INPUT_SIZE, int(width * scale))
+        new_height = max(INPUT_SIZE, int(height * scale))
         resized = rgb.resize((new_width, new_height), Image.Resampling.BILINEAR)
         left = (new_width - INPUT_SIZE) // 2
         top = (new_height - INPUT_SIZE) // 2
@@ -166,10 +190,22 @@ class OnnxEngine:
     def _run_with_timeout(
         self, session: ort.InferenceSession, inputs: dict[str, np.ndarray]
     ) -> np.ndarray:
-        """Run ``session.run`` with a wall-clock timeout (CPU releases GIL)."""
-        executor = ThreadPoolExecutor(max_workers=1)
+        """Run ``session.run`` with a wall-clock timeout and bounded concurrency.
+
+        The module-level semaphore admits at most
+        ``_MAX_CONCURRENT_INFERENCES`` in-flight inferences; the executor is
+        a process-lifetime singleton (never shut down) whose worker count
+        caps the threads that timed-out, uncancellable ``session.run`` calls
+        can occupy — a timeout only abandons the wait, it cannot stop the
+        run, and the slot is released in ``finally`` so a stuck call cannot
+        exhaust admission.
+        """
+        if not _INFERENCE_SLOTS.acquire(timeout=self._timeout_s):
+            raise InferenceTimeoutError(
+                f"no inference slot became available within {self._timeout_s}s"
+            )
         try:
-            future = executor.submit(session.run, None, inputs)
+            future = _INFERENCE_EXECUTOR.submit(session.run, None, inputs)
             try:
                 outputs = future.result(timeout=self._timeout_s)
             except TimeoutError as exc:
@@ -177,9 +213,9 @@ class OnnxEngine:
                 raise InferenceTimeoutError(
                     f"inference exceeded the {self._timeout_s}s timeout"
                 ) from exc
+            return np.asarray(outputs[0])
         finally:
-            executor.shutdown(wait=False, cancel_futures=True)
-        return np.asarray(outputs[0])
+            _INFERENCE_SLOTS.release()
 
 
 def _softmax(values: np.ndarray) -> np.ndarray:

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import base64
 import io
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pytest
@@ -17,7 +19,9 @@ import torch
 from PIL import Image
 from torch import nn
 
+from app.core.errors import ModelNotReadyError
 from app.explain.gradcam import GradCAM, heatmap_to_base64_png, overlay_heatmap
+from app.services.gradcam_backend import GradCAMBackend
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
@@ -393,3 +397,92 @@ def test_real_resnet18_gradcam_on_crazing_image(data_junction, resnet18_checkpoi
 
     assert len(model.layer4._forward_hooks) == 0
     assert len(model.layer4._backward_hooks) == 0
+
+
+# ---------------------------------------------------------------------------
+# Output size cap (M2): oversized overlays are downscaled before PNG encoding
+# ---------------------------------------------------------------------------
+
+
+def test_heatmap_to_base64_png_caps_oversized_square_images():
+    # A 4096x4096 noise overlay is ~50 MB as PNG (67 MB base64) — the output
+    # must be downscaled to a 1024px longest edge before encoding.
+    rng = np.random.default_rng(0)
+    image = Image.fromarray(rng.integers(0, 256, size=(4096, 4096, 3)).astype(np.uint8))
+    heatmap = np.linspace(0.0, 1.0, 224 * 224).reshape(224, 224)
+
+    decoded = base64.b64decode(heatmap_to_base64_png(heatmap, image))
+
+    assert len(decoded) < 4 * 1024 * 1024
+    overlay = Image.open(io.BytesIO(decoded))
+    assert overlay.size == (1024, 1024)
+
+
+def test_heatmap_to_base64_png_cap_preserves_aspect_ratio():
+    # Numpy shape (h=2048, w=4096) -> PIL size (4096, 2048), landscape.
+    rng = np.random.default_rng(1)
+    image = Image.fromarray(rng.integers(0, 256, size=(2048, 4096, 3)).astype(np.uint8))
+    heatmap = np.linspace(0.0, 1.0, 224 * 224).reshape(224, 224)
+
+    decoded = base64.b64decode(heatmap_to_base64_png(heatmap, image))
+
+    assert Image.open(io.BytesIO(decoded)).size == (1024, 512)
+
+
+# ---------------------------------------------------------------------------
+# Grad-CAM backend error hygiene (M1): no server paths in client messages
+# ---------------------------------------------------------------------------
+
+
+def test_backend_missing_checkpoint_error_is_generic(tmp_path):
+    backend = GradCAMBackend(tmp_path)
+    image = Image.new("RGB", (64, 64), (10, 20, 30))
+    with pytest.raises(ModelNotReadyError) as excinfo:
+        backend.explain("resnet18", image, 0)
+    message = str(excinfo.value)
+    assert "model artifact not ready" in message
+    assert str(tmp_path) not in message
+    assert "resnet18_best.pth" not in message
+
+
+# ---------------------------------------------------------------------------
+# Concurrency regression (C1): concurrent explain on the shared model must
+# neither crash nor corrupt results — serialized by the backend lock.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.slow
+def test_concurrent_explain_matches_serial_baseline(resnet18_checkpoint, sample_assets_dir):
+    image_path = sample_assets_dir / "crazing" / "crazing_101.jpg"
+    if not image_path.is_file():
+        pytest.skip("crazing sample image is missing")
+    backend = GradCAMBackend(resnet18_checkpoint.parent)
+    with Image.open(image_path) as handle:
+        image = handle.convert("RGB")
+
+    target_class = 0
+    # Warm-up loads the checkpoint and establishes the serial baseline.
+    baseline, baseline_ms = backend.explain("resnet18", image, target_class)
+    assert baseline_ms > 0.0
+
+    n_threads = 8
+    barrier = threading.Barrier(n_threads)
+    errors: list[BaseException] = []
+    results: list[str] = []
+
+    def worker() -> None:
+        try:
+            barrier.wait(timeout=60)
+            encoded, _elapsed = backend.explain("resnet18", image, target_class)
+            results.append(encoded)
+        except BaseException as exc:  # collect crashes/errors for assertion
+            errors.append(exc)
+
+    with ThreadPoolExecutor(max_workers=n_threads) as pool:
+        futures = [pool.submit(worker) for _ in range(n_threads)]
+        for future in futures:
+            future.result(timeout=300)
+
+    assert errors == []
+    assert len(results) == n_threads
+    assert all(encoded == baseline for encoded in results)

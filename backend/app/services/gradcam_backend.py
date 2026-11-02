@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import threading
 from pathlib import Path
+from time import perf_counter
 
 import torch
 import torchvision.models as models
@@ -27,12 +28,20 @@ _NUM_CLASSES = 6
 
 
 class GradCAMBackend:
-    """Thread-safe, checkpoint-backed Grad-CAM explainer."""
+    """Thread-safe, checkpoint-backed Grad-CAM explainer.
+
+    Grad-CAM autograd (``zero_grad`` + ``backward``) on a shared model is
+    not safe under concurrency — concurrent calls corrupt autograd state and
+    have been observed to crash the process — so each ``explain()`` runs
+    inside a per-architecture lock (C1).
+    """
 
     def __init__(self, checkpoint_dir: Path) -> None:
         self._checkpoint_dir = Path(checkpoint_dir)
         self._models: dict[str, nn.Module] = {}
         self._lock = threading.Lock()
+        self._compute_locks: dict[str, threading.Lock] = {}
+        self._locks_guard = threading.Lock()
 
     def _get_model(self, arch: str) -> nn.Module:
         model = self._models.get(arch)
@@ -46,13 +55,28 @@ class GradCAMBackend:
             self._models[arch] = model
             return model
 
+    def _compute_lock(self, arch: str) -> threading.Lock:
+        """Return the per-architecture compute lock, creating it lazily."""
+        lock = self._compute_locks.get(arch)
+        if lock is None:
+            with self._locks_guard:
+                lock = self._compute_locks.get(arch)
+                if lock is None:
+                    lock = threading.Lock()
+                    self._compute_locks[arch] = lock
+        return lock
+
     def _load_model(self, arch: str) -> nn.Module:
         checkpoint_path = self._checkpoint_dir / f"{arch}_best.pth"
         if not checkpoint_path.is_file():
-            raise ModelNotReadyError(
-                f"Grad-CAM checkpoint '{checkpoint_path.name}' is missing from "
-                f"{self._checkpoint_dir}"
+            # Full path goes to the server log only; the client message is
+            # generic so no filesystem layout leaks (M1).
+            logger.warning(
+                "Grad-CAM checkpoint %s is missing from %s",
+                checkpoint_path.name,
+                self._checkpoint_dir,
             )
+            raise ModelNotReadyError("model artifact not ready")
         try:
             model = _build_resnet(arch)
             checkpoint = torch.load(str(checkpoint_path), map_location="cpu", weights_only=True)
@@ -65,17 +89,21 @@ class GradCAMBackend:
         return model
 
     def explain(self, arch: str, image_rgb: Image.Image, target_class: int) -> tuple[str, float]:
-        """Return ``(base64_png, elapsed_ms)`` for one image and class."""
-        from time import perf_counter
+        """Return ``(base64_png, elapsed_ms)`` for one image and class.
 
-        model = self._get_model(arch)
-        tensor = torch.from_numpy(OnnxEngine.preprocess(image_rgb))
-        cam = GradCAM(model, model.layer4)
-        started = perf_counter()
-        heatmap = cam.compute(tensor, target_class=target_class)
-        elapsed_ms = (perf_counter() - started) * 1000.0
-        encoded = heatmap_to_base64_png(heatmap, image_rgb)
-        return encoded, elapsed_ms
+        Model fetch and compute run inside the per-architecture lock: the
+        shared model must never see concurrent ``zero_grad``/``backward``
+        calls (C1), and different architectures do not block each other.
+        """
+        with self._compute_lock(arch):
+            model = self._get_model(arch)
+            tensor = torch.from_numpy(OnnxEngine.preprocess(image_rgb))
+            cam = GradCAM(model, model.layer4)
+            started = perf_counter()
+            heatmap = cam.compute(tensor, target_class=target_class)
+            elapsed_ms = (perf_counter() - started) * 1000.0
+            encoded = heatmap_to_base64_png(heatmap, image_rgb)
+            return encoded, elapsed_ms
 
 
 def _build_resnet(arch: str) -> nn.Module:

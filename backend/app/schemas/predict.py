@@ -14,12 +14,6 @@ class RequestMeta(BaseModel):
     request_id: str
 
 
-class ErrorDetail(BaseModel):
-    code: str
-    message: str
-    status: int
-
-
 # -- predict -----------------------------------------------------------------
 
 
@@ -62,13 +56,6 @@ class PredictResponse(BaseModel):
     data: PredictData
     error: None
     meta: PredictMeta
-
-
-class ErrorResponse(BaseModel):
-    success: bool
-    data: None
-    error: ErrorDetail
-    meta: RequestMeta
 
 
 # -- models / samples / meta -------------------------------------------------

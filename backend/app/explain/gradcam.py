@@ -29,6 +29,10 @@ from torch import nn
 
 __all__ = ["GradCAM", "overlay_heatmap", "heatmap_to_base64_png"]
 
+# Longest edge allowed in overlay outputs (M2): caps response size while
+# keeping 1024px overlays visually useful.
+MAX_OVERLAY_EDGE = 1024
+
 # Approximated MATLAB "jet" colormap anchors: (position, (r, g, b)).
 _JET_ANCHORS: tuple[tuple[float, tuple[int, int, int]], ...] = (
     (0.0, (0, 0, 128)),
@@ -223,6 +227,17 @@ class GradCAM:
 # ---------------------------------------------------------------------------
 
 
+def _cap_long_edge(image: Image.Image, max_edge: int = MAX_OVERLAY_EDGE) -> Image.Image:
+    """Downscale proportionally so the longest edge is at most ``max_edge``."""
+    width, height = image.size
+    longest = max(width, height)
+    if longest <= max_edge:
+        return image
+    scale = max_edge / longest
+    new_size = (max(1, round(width * scale)), max(1, round(height * scale)))
+    return image.resize(new_size, Image.Resampling.BILINEAR)
+
+
 def overlay_heatmap(image_pil: Image.Image, heatmap: np.ndarray, alpha: float = 0.5) -> Image.Image:
     """Blend a jet-colored heatmap over an RGB PIL image.
 
@@ -259,8 +274,13 @@ def overlay_heatmap(image_pil: Image.Image, heatmap: np.ndarray, alpha: float = 
 
 
 def heatmap_to_base64_png(heatmap: np.ndarray, image_pil: Image.Image, alpha: float = 0.5) -> str:
-    """Return an alpha-blended heatmap overlay encoded as a base64 PNG string."""
-    overlay = overlay_heatmap(image_pil, heatmap, alpha)
+    """Return an alpha-blended heatmap overlay encoded as a base64 PNG string.
+
+    Oversized inputs are downscaled proportionally (longest edge capped at
+    :data:`MAX_OVERLAY_EDGE`) before encoding so the response stays bounded:
+    a 4096px overlay PNG alone is ~50 MB (67 MB base64).
+    """
+    overlay = overlay_heatmap(_cap_long_edge(image_pil), heatmap, alpha)
     buffer = io.BytesIO()
     overlay.save(buffer, format="PNG")
     return base64.b64encode(buffer.getvalue()).decode("ascii")

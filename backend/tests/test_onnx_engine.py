@@ -8,7 +8,9 @@ for exact parity.
 from __future__ import annotations
 
 import io
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pytest
@@ -136,6 +138,29 @@ def test_preprocess_matches_torchvision_on_non_square_image():
     np.testing.assert_allclose(actual, expected, atol=1e-4)
 
 
+def test_preprocess_matches_torchvision_on_downscaled_non_square_image():
+    # Downscale case (MED-1): the scaled size must be truncated with int()
+    # exactly like torchvision — round() shifts the crop window by 1px for
+    # non-integer scaled sizes (403 * 224/300 = 300.906... -> 300, not 301).
+    import torchvision.transforms as transforms
+
+    image = _rgb_image(403, 300, seed=7)
+    expected = (
+        transforms.Compose(
+            [
+                transforms.Resize(224, antialias=False),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+            ]
+        )(image)
+        .unsqueeze(0)
+        .numpy()
+    )
+    actual = OnnxEngine.preprocess(image)
+    np.testing.assert_allclose(actual, expected, atol=1e-4)
+
+
 def test_preprocess_preserves_square_images_exactly():
     # A 200x200 image resizes to exactly 224x224 — the center crop must be a
     # no-op, matching the training transform byte for byte.
@@ -168,6 +193,30 @@ def test_ensure_loaded_missing_artifact_raises_503(tmp_path):
     with pytest.raises(ModelNotReadyError) as excinfo:
         engine.ensure_loaded("resnet18-fp32")
     assert excinfo.value.status_code == 503
+
+
+def test_missing_artifact_message_does_not_leak_server_paths(tmp_path):
+    # M1: the client-facing 503 message must be generic; the full path is
+    # for the server log only.
+    model_dir = tmp_path / "deeply" / "nested" / "onnx"
+    engine = OnnxEngine(model_dir)
+    with pytest.raises(ModelNotReadyError) as excinfo:
+        engine.ensure_loaded("resnet18-fp32")
+    message = str(excinfo.value)
+    assert "model artifact not ready" in message
+    assert str(model_dir) not in message
+    assert "resnet18_fp32.onnx" not in message
+    assert "deeply" not in message
+
+
+def test_parse_model_id_error_sanitizes_control_characters():
+    # L1: model ids are echoed into error messages; control characters
+    # (log-injection vectors) must be stripped first.
+    with pytest.raises(ModelNotFoundError) as excinfo:
+        OnnxEngine.parse_model_id("resnet18-fp32\ninjected")
+    message = str(excinfo.value)
+    assert "\n" not in message
+    assert "resnet18-fp32injected" in message
 
 
 def test_ensure_loaded_unknown_id_raises_404(tmp_path):
@@ -258,6 +307,95 @@ def test_predict_timeout_raises_503(monkeypatch, tmp_path):
     with pytest.raises(InferenceTimeoutError) as excinfo:
         engine.predict("resnet18-fp32", _rgb_image())
     assert excinfo.value.status_code == 503
+
+
+def test_concurrent_predictions_are_bounded_to_two_slots(monkeypatch, tmp_path):
+    # M5: at most MAX_CONCURRENT_INFERENCES session.run calls may execute at
+    # once; a third concurrent request must wait on the semaphore.
+    active = 0
+    peak = 0
+    lock = threading.Lock()
+    two_started = threading.Event()
+    release = threading.Event()
+    logits = np.zeros((1, 6), np.float32)
+
+    def gated_run(_names, feed):
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+            if active >= 2:
+                two_started.set()
+        assert release.wait(timeout=15)
+        with lock:
+            active -= 1
+        return [logits]
+
+    fake = FakeSession(logits)
+    fake.run = gated_run
+    engine = OnnxEngine(tmp_path, timeout_s=15)
+    monkeypatch.setattr(engine, "ensure_loaded", lambda model_id: fake)
+    monkeypatch.setattr(engine, "_sessions", {"resnet18-fp32": fake})
+
+    errors: list[BaseException] = []
+
+    def call():
+        try:
+            return engine.predict("resnet18-fp32", _rgb_image())
+        except BaseException as exc:
+            errors.append(exc)
+            return None
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = [pool.submit(call) for _ in range(3)]
+        assert two_started.wait(timeout=15), "two inferences never started concurrently"
+        time.sleep(0.3)  # give the third caller time to slip in if unbounded
+        with lock:
+            observed_peak = peak
+        release.set()
+        results = [future.result(timeout=15) for future in futures]
+
+    assert errors == []
+    assert observed_peak == 2
+    assert all(result is not None for result in results)
+
+
+def test_predict_times_out_when_inference_slots_are_exhausted(monkeypatch, tmp_path):
+    # M5: with both slots held, a request must fail fast with the 503
+    # timeout error instead of queueing indefinitely.
+    slots = onnx_engine._INFERENCE_SLOTS
+    acquired = [slots.acquire(blocking=False) for _ in range(2)]
+    try:
+        fake = FakeSession(np.zeros((1, 6), np.float32))
+        engine = OnnxEngine(tmp_path, timeout_s=0.05)
+        monkeypatch.setattr(engine, "ensure_loaded", lambda model_id: fake)
+        monkeypatch.setattr(engine, "_sessions", {"resnet18-fp32": fake})
+        with pytest.raises(InferenceTimeoutError) as excinfo:
+            engine.predict("resnet18-fp32", _rgb_image())
+        assert excinfo.value.status_code == 503
+    finally:
+        for ok in acquired:
+            assert ok
+            slots.release()
+
+
+def test_timeout_releases_slot_and_reuses_executor(monkeypatch, tmp_path):
+    # M5: the executor is a process-lifetime singleton (no per-request
+    # executor churn) and a timed-out session.run cannot leak a slot or
+    # grow the thread pool beyond MAX_CONCURRENT_INFERENCES.
+    slow = SlowSession(np.zeros((1, 6), np.float32))
+    engine = OnnxEngine(tmp_path, timeout_s=0.05)
+    monkeypatch.setattr(engine, "ensure_loaded", lambda model_id: slow)
+    monkeypatch.setattr(engine, "_sessions", {"resnet18-fp32": slow})
+
+    executor_before = onnx_engine._INFERENCE_EXECUTOR
+    with pytest.raises(InferenceTimeoutError):
+        engine.predict("resnet18-fp32", _rgb_image())
+
+    assert onnx_engine._INFERENCE_EXECUTOR is executor_before
+    time.sleep(0.6)  # let the orphaned slow session.run finish
+    assert onnx_engine._INFERENCE_SLOTS._value == onnx_engine._MAX_CONCURRENT_INFERENCES
+    assert len(onnx_engine._INFERENCE_EXECUTOR._threads) <= onnx_engine._MAX_CONCURRENT_INFERENCES
 
 
 def test_predict_rejects_non_pil_image(tmp_path):

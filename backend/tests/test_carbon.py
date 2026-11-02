@@ -17,6 +17,7 @@ import re
 import pytest
 
 from app.carbon import constants
+from app.carbon import estimator
 from app.carbon.estimator import (
     METHOD_MEASURED,
     METHOD_TIER_FALLBACK,
@@ -81,7 +82,8 @@ def test_model_name_is_normalized():
 # ---------------------------------------------------------------------------
 
 
-def test_unknown_model_falls_back_to_resnet50_with_warning(caplog):
+def test_unknown_model_falls_back_to_resnet50_with_warning(caplog, monkeypatch):
+    monkeypatch.setattr(estimator, "_FALLBACK_WARNED_ONCE", set())
     with caplog.at_level(logging.WARNING):
         result = estimate("resnet18", country="China", pue=1.0, calibration_factor=1.0)
     assert "resnet_18" in caplog.text or "resnet18" in caplog.text
@@ -91,6 +93,17 @@ def test_unknown_model_falls_back_to_resnet50_with_warning(caplog):
     )
     assert result.co2eq_g == pytest.approx(energy_per_inference * CHINA_CI, rel=1e-12)
     assert result.method == METHOD_TIER_FALLBACK
+
+
+def test_fallback_warning_is_logged_once_per_process(caplog, monkeypatch):
+    # LOW-2: repeated unknown-model requests must not warn on every call —
+    # the fallback warning is emitted once per model name.
+    monkeypatch.setattr(estimator, "_FALLBACK_WARNED_ONCE", set())
+    with caplog.at_level(logging.WARNING):
+        estimate("resnet18", country="China", pue=1.0, calibration_factor=1.0)
+        estimate("resnet18", country="China", pue=1.0, calibration_factor=1.0)
+        estimate("resnet18", country="China", pue=1.0, calibration_factor=1.0)
+    assert caplog.text.count("falling back") == 1
 
 
 def test_resnet18_is_not_in_measured_table():
@@ -146,7 +159,9 @@ def test_invalid_model_name_raises():
 
 def test_equivalent_text_formats_across_magnitudes(monkeypatch):
     # With China CI, pue=1 and calibration=1, co2eq_g == energy_per_inf * 582,
-    # and the phone-charge equivalent is co2eq_g / 0.1 seconds.
+    # and the phone-charge equivalent is co2eq_g / 0.1 seconds. Sub-10 ms
+    # equivalents switch to milliseconds (sub-millisecond "seconds" are
+    # meaningless precision theater).
     monkeypatch.setitem(constants.INFERENCE_ENERGY_KWH_PER_1000, "heavy", 17.2)
     monkeypatch.setitem(constants.INFERENCE_ENERGY_KWH_PER_1000, "medium", 1.0)
     monkeypatch.setitem(constants.INFERENCE_ENERGY_KWH_PER_1000, "light", 0.01)
@@ -155,7 +170,7 @@ def test_equivalent_text_formats_across_magnitudes(monkeypatch):
         "heavy": "≈ 手机充电 100 秒",  # 10.0104 g -> 100.1 s
         "medium": "≈ 手机充电 5.8 秒",  # 0.582 g -> 5.82 s
         "light": "≈ 手机充电 0.06 秒",  # 0.00582 g -> 0.0582 s
-        "tiny": "≈ 手机充电 0.00582 秒",  # 0.000582 g -> 0.00582 s
+        "tiny": "≈ 手机充电 5.82 毫秒",  # 0.000582 g -> 0.00582 s -> 5.82 ms
     }
     for model, expected in cases.items():
         result = estimate(model, country="China", pue=1.0, calibration_factor=1.0)
@@ -164,7 +179,7 @@ def test_equivalent_text_formats_across_magnitudes(monkeypatch):
 
 def test_equivalent_text_matches_expected_pattern():
     result = estimate("resnet_50")
-    assert re.fullmatch(r"≈ 手机充电 [0-9.]+ 秒", result.equivalent)
+    assert re.fullmatch(r"≈ 手机充电 [0-9.]+ (秒|毫秒)", result.equivalent)
 
 
 # ---------------------------------------------------------------------------

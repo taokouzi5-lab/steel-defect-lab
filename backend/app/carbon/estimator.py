@@ -22,6 +22,10 @@ logger = logging.getLogger(__name__)
 METHOD_MEASURED = "mace-f-methodD-measured"
 METHOD_TIER_FALLBACK = "tier-representative-fallback"
 
+# Process-level dedup for the fallback warning (LOW-2): the model table is
+# static, so warn once per model name instead of on every request.
+_FALLBACK_WARNED_ONCE: set[str] = set()
+
 
 @dataclass(frozen=True)
 class CarbonEstimate:
@@ -44,12 +48,14 @@ def _resolve_energy(model_name: str) -> tuple[float, str]:
     if measured is not None:
         return measured, METHOD_MEASURED
     representative = constants.T3_REPRESENTATIVE_MODEL
-    logger.warning(
-        "model '%s' has no mace-f method-D measurement; falling back to the "
-        "T3-tier representative '%s'",
-        model_name,
-        representative,
-    )
+    if model_name not in _FALLBACK_WARNED_ONCE:
+        _FALLBACK_WARNED_ONCE.add(model_name)
+        logger.warning(
+            "model '%s' has no mace-f method-D measurement; falling back to the "
+            "T3-tier representative '%s'",
+            model_name,
+            representative,
+        )
     return constants.INFERENCE_ENERGY_KWH_PER_1000[representative], METHOD_TIER_FALLBACK
 
 
@@ -63,14 +69,17 @@ def _resolve_calibration_factor(model_name: str, calibration_factor: float | Non
 def _format_equivalent(co2eq_g: float) -> str:
     seconds = co2eq_g / constants.PHONE_CHARGE_GCO2EQ_PER_SECOND
     if seconds >= 100.0:
-        text = f"{seconds:.0f}"
+        text = f"{seconds:.0f} 秒"
     elif seconds >= 1.0:
-        text = f"{seconds:.1f}"
+        text = f"{seconds:.1f} 秒"
     elif seconds >= 0.01:
-        text = f"{seconds:.2f}"
+        text = f"{seconds:.2f} 秒"
     else:
-        text = f"{seconds:.3g}"
-    return f"≈ 手机充电 {text} 秒"
+        # Sub-10 ms equivalents are below the measurement's meaningful
+        # precision: report milliseconds instead of sub-millisecond
+        # "seconds" (LOW-1).
+        text = f"{seconds * 1000.0:.3g} 毫秒"
+    return f"≈ 手机充电 {text}"
 
 
 def estimate(

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.carbon import constants, meta as carbon_meta
-from app.core import envelope
+from app.core import body_limit, envelope
 from app.core.errors import (
     AppError,
     InferenceTimeoutError,
@@ -16,6 +16,7 @@ from app.core.errors import (
     UnprocessableImageError,
     UnsupportedMediaTypeError,
 )
+from app.core.sanitize import sanitize_text
 
 pytestmark = pytest.mark.unit
 
@@ -105,3 +106,41 @@ def test_carbon_meta_respects_country():
 def test_carbon_meta_unknown_country_raises():
     with pytest.raises(ValueError):
         carbon_meta.build_carbon_meta(country="Atlantis")
+
+
+# ---------------------------------------------------------------------------
+# Body-size precheck decision (H1)
+# ---------------------------------------------------------------------------
+
+
+def test_content_length_precheck_rejects_only_declared_oversize():
+    limit = 6 * 1024 * 1024
+    assert body_limit.content_length_exceeds(str(limit + 1).encode(), limit) is True
+    assert body_limit.content_length_exceeds(str(limit).encode(), limit) is False
+    assert body_limit.content_length_exceeds(b"123", limit) is False
+
+
+def test_content_length_precheck_ignores_missing_or_malformed_headers():
+    limit = 6 * 1024 * 1024
+    assert body_limit.content_length_exceeds(None, limit) is False  # chunked/no header
+    assert body_limit.content_length_exceeds(b"", limit) is False
+    assert body_limit.content_length_exceeds(b"not-a-number", limit) is False
+    assert body_limit.content_length_exceeds(b"-5", limit) is False
+    assert body_limit.content_length_exceeds(b"1,2", limit) is False
+
+
+# ---------------------------------------------------------------------------
+# Log/error sanitization (L1)
+# ---------------------------------------------------------------------------
+
+
+def test_sanitize_text_strips_control_characters():
+    assert sanitize_text("ab\ncd\t\x00ef") == "abcdef"
+    assert sanitize_text("id\x1b[31mred") == "id[31mred"
+    assert sanitize_text("\x7fdel") == "del"
+
+
+def test_sanitize_text_handles_non_string_values():
+    assert sanitize_text(123) == "123"
+    assert sanitize_text(None) == "None"
+    assert sanitize_text("plain") == "plain"

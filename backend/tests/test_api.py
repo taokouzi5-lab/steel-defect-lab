@@ -374,6 +374,40 @@ def test_predict_rejects_oversized_upload_413(api_client):
     assert response.json()["error"]["code"] == "payload_too_large"
 
 
+def test_predict_rejects_oversized_content_length_before_parsing(api_client):
+    # The ASGI precheck rejects declared-oversized bodies (upload cap 5 MB +
+    # 1 MB multipart overhead) from the Content-Length header alone, without
+    # parsing. The body here is NOT valid multipart: if the framework parsed
+    # it, this would be a 400/422, not the 413 envelope below.
+    payload = b"\x00" * (6 * ONE_MB + 1)
+    response = api_client.post(
+        "/api/v1/predict",
+        content=payload,
+        headers={
+            "Content-Type": "application/octet-stream",
+            "Content-Length": str(len(payload)),
+        },
+    )
+    assert response.status_code == 413
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "payload_too_large"
+    assert body["error"]["status"] == 413
+
+
+def test_predict_content_length_within_precheck_budget_proceeds(api_client, monkeypatch, fixtures_dir):
+    # A normal multipart upload sits well below the precheck threshold, so
+    # the middleware must let it through to the regular request path.
+    _mock_engine(api_client, monkeypatch)
+    image_bytes = (fixtures_dir / "valid_jpeg.jpg").read_bytes()
+    response = api_client.post(
+        "/api/v1/predict",
+        files={"file": ("photo.jpg", image_bytes, "image/jpeg")},
+        data={"model": "resnet18-fp32"},
+    )
+    assert response.status_code == 200
+
+
 def test_predict_unknown_model_404(api_client, monkeypatch, fixtures_dir):
     _mock_engine(api_client, monkeypatch)
     image_bytes = (fixtures_dir / "valid_jpeg.jpg").read_bytes()
@@ -545,6 +579,28 @@ def test_rate_limit_returns_429_envelope(monkeypatch, tmp_path):
     assert body["success"] is False
     assert body["error"]["code"] == "rate_limited"
     assert body["error"]["status"] == 429
+
+
+# ---------------------------------------------------------------------------
+# Documentation endpoints (L3): enabled by default, switchable off
+# ---------------------------------------------------------------------------
+
+
+def test_docs_endpoints_are_enabled_by_default(client):
+    assert client.get("/docs").status_code == 200
+    assert client.get("/redoc").status_code == 200
+    assert client.get("/openapi.json").status_code == 200
+
+
+def test_docs_endpoints_can_be_disabled(tmp_path):
+    settings = Settings.from_env(
+        model_dir=tmp_path, metrics_path=_write_metrics(tmp_path), enable_docs=False
+    )
+    with TestClient(create_app(settings)) as test_client:
+        for path in ("/docs", "/redoc", "/openapi.json"):
+            response = test_client.get(path)
+            assert response.status_code == 404, path
+            assert response.json()["error"]["status"] == 404
 
 
 # ---------------------------------------------------------------------------

@@ -20,6 +20,8 @@ REQUEST_TIMEOUT_S    per-inference timeout in seconds (default: 10)
 PRELOAD_MODELS       load all ONNX sessions at startup (default: 1)
 CORS_ORIGINS         comma-separated allowed origins (dev default: localhost:5173)
 CARBON_COUNTRY       grid intensity region for carbon estimates (default: China)
+DEFECTLENS_ENABLE_DOCS  serve /docs, /redoc and /openapi.json (default: 1;
+                     set 0 in deployed containers — see docs/deployment.md)
 """
 
 from __future__ import annotations
@@ -50,6 +52,7 @@ class Settings:
     preload_models: bool = True
     cors_origins: tuple[str, ...] = _DEV_CORS_ORIGINS
     carbon_country: str = carbon_constants.DEFAULT_COUNTRY
+    enable_docs: bool = True
 
     @classmethod
     def from_env(cls, **overrides) -> "Settings":
@@ -89,6 +92,7 @@ class Settings:
             "request_timeout_s": float_env("REQUEST_TIMEOUT_S", 10.0),
             "preload_models": bool_env("PRELOAD_MODELS", True),
             "carbon_country": os.environ.get("CARBON_COUNTRY", carbon_constants.DEFAULT_COUNTRY),
+            "enable_docs": bool_env("DEFECTLENS_ENABLE_DOCS", True),
         }
         raw_origins = os.environ.get("CORS_ORIGINS")
         values["cors_origins"] = (

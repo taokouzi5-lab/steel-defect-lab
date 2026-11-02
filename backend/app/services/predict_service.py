@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from app.carbon.estimator import estimate
 from app.config import Settings
 from app.core.errors import ModelNotFoundError, ModelNotReadyError, SampleNotFoundError
+from app.core.sanitize import sanitize_text
 from app.core.validation import validate_upload
 from app.inference.model_registry import ModelMeta, ModelRegistry
 from app.inference.onnx_engine import OnnxEngine
@@ -71,7 +72,7 @@ class PredictService:
             raise SampleNotFoundError(sample_id)
         info = self._catalog.get(sample_id)
         if info is None:
-            raise SampleNotFoundError(f"no sample with id '{sample_id}'")
+            raise SampleNotFoundError(f"no sample with id '{sanitize_text(sample_id)}'")
         path = self._catalog.path_of(info)
         try:
             image_bytes = path.read_bytes()
@@ -90,7 +91,7 @@ class PredictService:
                 raise ModelNotReadyError(
                     "no models are registered; check the metrics file configuration"
                 )
-            raise ModelNotFoundError(f"unknown model id '{model_id}'")
+            raise ModelNotFoundError(f"unknown model id '{sanitize_text(model_id)}'")
         return meta
 
     def _infer(self, image, model_id: str, want_gradcam: bool) -> PredictResult:
