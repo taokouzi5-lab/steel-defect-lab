@@ -1,0 +1,195 @@
+/* DefectLens design tokens — industrial editorial, dark-first */
+
+:root {
+  --bg: #101114;
+  --surface: #17181d;
+  --surface-2: #1e2028;
+  --surface-3: #262a35;
+  --border: #2b2e38;
+  --border-strong: #3a3f4c;
+  --text: #e6e4df;
+  --text-dim: #8f919c;
+  --accent: #e8613a;
+  --accent-soft: rgba(232, 97, 58, 0.14);
+  --carbon: #58b368;
+  --carbon-soft: rgba(88, 179, 104, 0.14);
+  --danger: #d24d4d;
+
+  --font-display: 'Bahnschrift', 'DIN Alternate', 'Segoe UI', sans-serif;
+  --font-body: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+  --font-mono: 'Cascadia Mono', Consolas, 'Courier New', monospace;
+
+  --text-hero: clamp(2.2rem, 1.4rem + 3vw, 3.4rem);
+  --text-h2: clamp(1.4rem, 1rem + 1.2vw, 1.9rem);
+  --space-page: clamp(1rem, 2vw, 2.5rem);
+  --space-section: clamp(2.5rem, 1.5rem + 4vw, 5rem);
+  --radius-sm: 2px;
+  --radius-md: 6px;
+  --duration-fast: 150ms;
+  --duration-normal: 300ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-height: 100svh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  background-image:
+    radial-gradient(1200px 600px at 85% -10%, rgba(232, 97, 58, 0.05), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(88, 179, 104, 0.04), transparent 55%);
+  background-attachment: fixed;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+img {
+  max-width: 100%;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
+
+/* ---------- layout shell ---------- */
+
+.app-shell {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 0.9rem var(--space-page);
+  border-bottom: 1px solid var(--border);
+  background: rgba(16, 17, 20, 0.92);
+  backdrop-filter: blur(8px);
+}
+
+.brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: 0.08em;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+}
+
+.brand-mark {
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
+
+.site-nav {
+  display: flex;
+  gap: 1.5rem;
+  flex: 1;
+}
+
+.site-nav a {
+  text-decoration: none;
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  padding: 0.3rem 0;
+  border-bottom: 2px solid transparent;
+  transition:
+    color var(--duration-fast),
+    border-color var(--duration-fast);
+}
+
+.site-nav a:hover {
+  color: var(--text);
+}
+
+.site-nav a.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.status-chip {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--carbon);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  background: var(--surface);
+}
+
+.site-main {
+  flex: 1;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-section) var(--space-page);
+}
+
+.site-footer {
+  border-top: 1px solid var(--border);
+  padding: 1.2rem var(--space-page);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.site-footer a {
+  color: var(--text-dim);
+}
+
+/* ---------- shared primitives ---------- */
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.section-title {
+  font-size: var(--text-h2);
+  margin-bottom: 0.75rem;
+}
+
+.section-title .kicker {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 0.4rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+}
