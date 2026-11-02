@@ -1,0 +1,376 @@
+/* Result side of the inference flow: result panel, confidence bars,
+   Grad-CAM viewer, carbon panel, recent history. */
+
+/* ---------- result panel ---------- */
+
+.result-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.result-panel.is-empty,
+.result-panel.is-pending {
+  min-height: 240px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.result-panel.is-pending {
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.result-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.75rem;
+}
+
+.result-head h2 {
+  font-size: 1.4rem;
+}
+
+.result-confidence {
+  color: var(--carbon);
+  font-size: 1.1rem;
+}
+
+.result-latency {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.result-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.25rem;
+}
+
+/* ---------- confidence bars ---------- */
+
+.confidence-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.confidence-row {
+  display: grid;
+  grid-template-columns: minmax(0, 9rem) minmax(0, 1fr) 4.5rem;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.confidence-label {
+  font-size: 0.88rem;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.confidence-row.is-top .confidence-label {
+  color: var(--text);
+}
+
+.confidence-track {
+  display: block;
+  height: 10px;
+  background: var(--surface-3);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.confidence-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transform-origin: left center;
+  animation: bar-grow var(--duration-normal) var(--ease-out) both;
+}
+
+.confidence-row.is-top .confidence-fill {
+  background: var(--carbon);
+}
+
+.confidence-value {
+  text-align: right;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+@keyframes bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(var(--fill-scale));
+  }
+}
+
+/* ---------- Grad-CAM viewer ---------- */
+
+.gradcam-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.gradcam-tabs {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  align-self: flex-start;
+}
+
+.gradcam-tab {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.9rem;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  border: none;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.gradcam-tab:last-child {
+  border-right: none;
+}
+
+.gradcam-tab:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.gradcam-tab.is-active {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.gradcam-tab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.gradcam-stage {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.gradcam-img {
+  display: block;
+  max-width: 100%;
+  max-height: 260px;
+  object-fit: contain;
+}
+
+.gradcam-overlay-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.gradcam-overlay-wrap .gradcam-heat {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  mix-blend-mode: screen;
+}
+
+.gradcam-hint {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  padding: 1rem;
+}
+
+.gradcam-opacity {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+.gradcam-opacity input[type='range'] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.gradcam-meta {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+/* ---------- carbon panel ---------- */
+
+.carbon-panel {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--carbon);
+  background: var(--carbon-soft);
+  border-radius: var(--radius-sm);
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.carbon-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.carbon-head h3 {
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.carbon-value {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.carbon-value strong {
+  color: var(--carbon-strong);
+  font-size: 1.6rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.carbon-unit {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.carbon-equivalent {
+  margin: 0;
+  color: var(--carbon);
+  font-size: 0.95rem;
+}
+
+.carbon-details {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.carbon-details div {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.carbon-details dt {
+  color: var(--text-dim);
+  flex: 0 0 4.5rem;
+}
+
+.carbon-details dd {
+  margin: 0;
+  color: var(--text);
+}
+
+.carbon-method-link {
+  align-self: flex-start;
+  color: var(--carbon);
+  font-size: 0.85rem;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.carbon-method-link:hover {
+  border-bottom-color: var(--carbon);
+}
+
+/* ---------- recent history ---------- */
+
+.recent-panel {
+  margin-top: var(--space-section);
+}
+
+.recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.recent-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6rem minmax(0, 11rem) 11rem;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.6rem 1rem;
+  font-size: 0.88rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.recent-item:last-child {
+  border-bottom: none;
+}
+
+.recent-class {
+  color: var(--text);
+}
+
+.recent-carbon {
+  color: var(--carbon);
+}
+
+.recent-model {
+  color: var(--text-dim);
+  text-align: right;
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 860px) {
+  .result-split {
+    grid-template-columns: 1fr;
+  }
+
+  .confidence-row {
+    grid-template-columns: minmax(0, 7rem) minmax(0, 1fr) 4rem;
+  }
+
+  .recent-item {
+    grid-template-columns: minmax(0, 1fr) 4.5rem minmax(0, 9rem);
+  }
+
+  .recent-model {
+    display: none;
+  }
+}

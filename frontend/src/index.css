@@ -13,7 +13,10 @@
   --accent-soft: rgba(232, 97, 58, 0.14);
   --carbon: #58b368;
   --carbon-soft: rgba(88, 179, 104, 0.14);
+  --carbon-strong: #7ed694;
   --danger: #d24d4d;
+  --danger-soft: rgba(210, 77, 77, 0.12);
+  --warn: #d9a441;
 
   --font-display: 'Bahnschrift', 'DIN Alternate', 'Segoe UI', sans-serif;
   --font-body: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
