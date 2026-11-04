@@ -64,3 +64,56 @@ jobs:
 
       - name: Tests (CPU-only; artifact-dependent tests skip)
         run: cd backend && pytest tests -q -m "not slow" --cov=app --cov-report=term-missing --cov-fail-under=70
+
+  docker-build:
+    # T5.1: build the production image from a bare checkout. The gitignored
+    # model assets (artifacts/onnx, artifacts/checkpoints) are absent here;
+    # the image must still build and boot in "models not ready" mode —
+    # this is the documented degradation contract (see Dockerfile header),
+    # and it exercises the exact production Dockerfile, not a CI variant.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build production image
+        run: docker build -t steel-defect-lab:ci .
+
+      - name: Boot container and probe endpoints
+        run: |
+          docker run -d --name sdl-ci \
+            -e PRELOAD_MODELS=1 \
+            -e RATE_LIMIT_ENABLED=1 \
+            -p 127.0.0.1:7860:7860 \
+            steel-defect-lab:ci
+          for i in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:7860/api/v1/health && break
+            sleep 2
+          done
+          echo
+          # Health must report ok with zero preloaded models (no assets)
+          curl -fsS http://127.0.0.1:7860/api/v1/health
+          echo
+          # Single-container SPA: index.html served at /
+          curl -fsS http://127.0.0.1:7860/ | grep -q '<div id="root">'
+          # Registry lists the 4 metrics-known models, all unavailable
+          curl -fsS http://127.0.0.1:7860/api/v1/models
+          echo
+          curl -fsS http://127.0.0.1:7860/api/v1/models > /tmp/models.json
+          grep -q '"count": 4' /tmp/models.json
+          [ "$(grep -o '"available": false' /tmp/models.json | wc -l)" = "4" ]
+          # Predict answers 503 model_not_ready with the JSON envelope
+          status=$(curl -s -o /tmp/predict.json -w '%{http_code}' \
+            -F "file=@backend/app/assets/samples/crazing/crazing_11.jpg" \
+            http://127.0.0.1:7860/api/v1/predict)
+          echo "predict status: $status"
+          [ "$status" = "503" ] || { cat /tmp/predict.json; exit 1; }
+          grep -q '"code": *"model_not_ready"' /tmp/predict.json
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs sdl-ci
+
+      - name: Remove container
+        if: always()
+        run: docker rm -f sdl-ci || true

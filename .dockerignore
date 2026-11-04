@@ -1,0 +1,47 @@
+# Build context exclusions for the production image (T5.1).
+#
+# IMPORTANT — must NOT be excluded (baked into the image):
+#   artifacts/onnx/, artifacts/checkpoints/  (gitignored model assets; the
+#       image bakes them in when they exist in the build context)
+#   backend/app/assets/samples/              (demo samples + manifest)
+#   frontend/package.json, package-lock.json (stage 1 npm ci)
+#   backend/app/, backend/pyproject.toml     (runtime + editable install)
+
+# VCS / CI / tooling
+.git/
+.github/
+.claude/
+.vscode/
+.idea/
+Dockerfile
+.dockerignore
+
+# Python artifacts and caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Frontend: dependencies and build products are rebuilt in stage 1
+node_modules/
+dist/
+frontend/e2e/
+frontend/test-results/
+frontend/playwright-report/
+
+# Training pipeline and dev-only content (not needed at runtime)
+training/
+docs/
+backend/tests/
+
+# Runtime-generated carbon reports (regenerated per run)
+artifacts/carbon/
+
+# Secrets / local env
+.env
+.env.*

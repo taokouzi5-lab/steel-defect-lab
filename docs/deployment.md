@@ -4,6 +4,12 @@ Deploying the `backend/` FastAPI service to a free ModelScope container (or
 any single-instance Linux container). Follow these rules to keep the
 security posture from the security review intact.
 
+The repo-root `Dockerfile` (T5.1) is the standard deployment path — it runs
+gunicorn with uvicorn workers; see
+[Container image (Dockerfile)](#container-image-dockerfile-t51) below. The
+uvicorn recipe here remains the reference for bare-uvicorn deployments and
+for the worker-count rationale.
+
 ## uvicorn parameters (fixed recipe)
 
 ```bash
@@ -35,6 +41,51 @@ export CORS_ORIGINS=              # empty: no browser CORS in production
 - `DEFECTLENS_ENABLE_DOCS=0` disables the documentation endpoints
   (`/docs`, `/redoc`, `/openapi.json`); they default to enabled for
   development.
+
+## Container image (Dockerfile, T5.1)
+
+The repo-root `Dockerfile` builds the single-container production image for
+ModelScope 创空间 Docker deployment (port 7860, 8 GB memory budget).
+
+- **Entrypoint**: gunicorn with uvicorn workers
+  (`gunicorn --config /app/backend/gunicorn.conf.py app.asgi:app`),
+  **2 workers by default** (each worker holds its own torch runtime and
+  ONNX session cache; both fit in the 8 GB budget), overridable via
+  `WORKERS`. The worker-count trade-off from the recipe above still holds:
+  the slowapi limiter is in-memory per process, so per-client budgets scale
+  with the worker count — set `WORKERS=1` to restore the strict
+  single-process budget semantics.
+- **Port**: listens on `0.0.0.0:7860` (ModelScope Docker convention),
+  overridable via `PORT`.
+- **Runtime user**: non-root (`app`, uid 10001); `/app` is read-only at
+  runtime (`PYTHONDONTWRITEBYTECODE=1`).
+- **Frontend**: built inside the image (node:24-alpine stage, `npm ci` +
+  `npm run build`) and served by FastAPI from `frontend/dist` — no separate
+  web server and no dependence on a host-built `dist`.
+- **Health probe**: `curl http://localhost:7860/api/v1/health` — always
+  200 while the process is up; `models_loaded` reports how many ONNX
+  sessions were preloaded at boot.
+- **Dependencies**: torch/torchvision CPU wheels and the
+  [onnxruntime container override](#onnxruntime-pinning-l2-policy); system
+  packages are only `libgomp1` (torch CPU OpenMP) and `curl` (healthcheck).
+- **CORS**: the image sets `CORS_ORIGINS=""` — an explicit empty string
+  turns the CORS middleware off (the SPA and the API share one origin);
+  leaving the variable unset keeps the dev-server defaults.
+
+### Model assets are baked from the build context
+
+`artifacts/onnx` and `artifacts/checkpoints` are gitignored; the image bakes
+them in **when they exist in the build context** (local checkout or
+ModelScope upload). Nothing in the Dockerfile hard-fails without them:
+
+- With assets: all four model ids report `available=true` and
+  `PRELOAD_MODELS=1` warms the ONNX sessions at boot.
+- Without assets (e.g. a bare `git clone` build): the image still builds
+  and serves — `/api/v1/health` returns 200 with an empty `models_loaded`,
+  `/api/v1/models` lists the four metrics-known models with
+  `available=false`, and `POST /predict` answers `503 model_not_ready`
+  (envelope). The CI `docker-build` job asserts this boot + degradation
+  contract on every push.
 
 ## Cold start
 

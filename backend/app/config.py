@@ -18,7 +18,9 @@ RATE_LIMIT_PER_MIN   per-client request budget (default: 20)
 RATE_LIMIT_ENABLED   enable slowapi limiting (default: 1)
 REQUEST_TIMEOUT_S    per-inference timeout in seconds (default: 10)
 PRELOAD_MODELS       load all ONNX sessions at startup (default: 1)
-CORS_ORIGINS         comma-separated allowed origins (dev default: localhost:5173)
+CORS_ORIGINS         comma-separated allowed origins (dev default: localhost:5173;
+                     explicit empty string disables CORS — the production
+                     container sets it empty, see docs/deployment.md)
 CARBON_COUNTRY       grid intensity region for carbon estimates (default: China)
 DEFECTLENS_ENABLE_DOCS  serve /docs, /redoc and /openapi.json (default: 1;
                      set 0 in deployed containers — see docs/deployment.md)
@@ -101,11 +103,16 @@ class Settings:
             "enable_docs": bool_env("DEFECTLENS_ENABLE_DOCS", True),
         }
         raw_origins = os.environ.get("CORS_ORIGINS")
-        values["cors_origins"] = (
-            tuple(origin.strip() for origin in raw_origins.split(",") if origin.strip())
-            if raw_origins
-            else _DEV_CORS_ORIGINS
-        )
+        # Unset -> dev-server origins; an explicit empty string (the
+        # production container contract, docs/deployment.md) -> CORS off.
+        if raw_origins is None:
+            values["cors_origins"] = _DEV_CORS_ORIGINS
+        elif raw_origins.strip() == "":
+            values["cors_origins"] = ()
+        else:
+            values["cors_origins"] = tuple(
+                origin.strip() for origin in raw_origins.split(",") if origin.strip()
+            )
         values.update(overrides)
         settings = cls(**values)
         settings.validate()
