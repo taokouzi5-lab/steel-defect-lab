@@ -11,13 +11,13 @@ import os
 # ModelScope 创空间 Docker convention: listen on 7860 unless PORT is set.
 bind = f"0.0.0.0:{os.environ.get('PORT', '7860')}"
 
-# Default 2 workers: they fit comfortably in the 8 GB budget (each worker
-# holds its own torch runtime + ONNX session cache). Caveat: the slowapi
-# rate limiter uses in-memory storage (memory://), so counters live in one
-# process and per-client budgets scale with the worker count — that is the
-# reason docs/deployment.md documents a single-worker recipe. Set WORKERS=1
-# to restore the strict single-process budget semantics.
-workers = int(os.environ.get("WORKERS", "2"))
+# Default 1 worker: the slowapi rate limiter uses in-memory storage
+# (memory://), so counters live in one process and N workers would multiply
+# per-client budgets by N — the single-worker recipe documented in
+# docs/deployment.md. It also keeps torch runtime + ONNX session memory to a
+# single copy (~0.7 GB RSS) inside the 8 GB budget. Raise WORKERS only when
+# a shared rate-limit backend is configured.
+workers = int(os.environ.get("WORKERS", "1"))
 
 worker_class = "uvicorn.workers.UvicornWorker"
 
