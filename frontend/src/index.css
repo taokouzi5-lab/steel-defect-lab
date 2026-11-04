@@ -146,6 +146,26 @@ a {
   background: var(--surface);
 }
 
+/* Narrow viewports: the header wraps to two rows (brand / nav) and the
+   status chip is hidden — a single row overflows horizontally at 320px. */
+@media (max-width: 560px) {
+  .site-header {
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    row-gap: 0.6rem;
+  }
+
+  .site-nav {
+    order: 3;
+    flex-basis: 100%;
+    gap: 1rem;
+  }
+
+  .status-chip {
+    display: none;
+  }
+}
+
 .site-main {
   flex: 1;
   width: 100%;
