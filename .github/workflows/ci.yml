@@ -33,7 +33,7 @@ jobs:
       - name: Lint with ruff
         run: ruff check training
 
-      - name: Security scan with bandit (-ll: low severity and above)
+      - name: "Security scan with bandit (-ll: low severity and above)"
         run: bandit -r training/steel_training training/scripts -ll -q
 
       - name: Tests (CPU-only; GPU smoke test skipped)
@@ -59,7 +59,7 @@ jobs:
       - name: Lint with ruff
         run: ruff check backend
 
-      - name: Security scan with bandit (-ll: low severity and above)
+      - name: "Security scan with bandit (-ll: low severity and above)"
         run: bandit -r backend/app -ll -q
 
       - name: Tests (CPU-only; artifact-dependent tests skip)
