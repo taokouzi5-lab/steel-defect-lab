@@ -29,6 +29,7 @@ from app.core import envelope
 from app.core.body_limit import BodySizeLimitMiddleware
 from app.core.errors import AppError
 from app.core.rate_limit import limiter
+from app.core.spa_static import SPAStaticFiles
 from app.inference.model_registry import ModelRegistry
 from app.inference.onnx_engine import OnnxEngine
 from app.services.gradcam_backend import GradCAMBackend
@@ -127,6 +128,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return response
 
     app.include_router(routes.router)
+
+    # -- frontend static hosting (single-container topology) ----------------
+    # Mounted last: /api/v1/* routes win, everything else falls through to
+    # the SPA build with an index.html fallback for client-side routes.
+    dist_dir = settings.frontend_dist_dir
+    if (dist_dir / "index.html").is_file():
+        app.mount(
+            "/",
+            SPAStaticFiles(directory=str(dist_dir), html=True),
+            name="frontend",
+        )
+        logger.info("serving frontend from %s", dist_dir)
+    else:
+        logger.info(
+            "frontend dist not found at %s; API-only mode (build the "
+            "frontend or set FRONTEND_DIST_DIR)",
+            dist_dir,
+        )
+
     return app
 
 

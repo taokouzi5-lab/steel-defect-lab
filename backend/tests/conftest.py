@@ -129,6 +129,11 @@ TEST_FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 def _fastapi_env_defaults(monkeypatch):
     """Keep tests fast and deterministic: no model preload, no rate limiting.
 
+    The frontend dist is pointed at a missing path so API tests run in
+    API-only mode regardless of whether a real frontend build exists on the
+    machine; SPA hosting behaviour is covered explicitly by
+    test_spa_static.py with an injected dist directory.
+
     Individual tests that exercise preloading or rate limiting re-enable the
     feature by setting the env var again (the same function-scoped
     ``monkeypatch`` instance is used, so the later ``setenv`` wins) before
@@ -136,6 +141,7 @@ def _fastapi_env_defaults(monkeypatch):
     """
     monkeypatch.setenv("PRELOAD_MODELS", "0")
     monkeypatch.setenv("RATE_LIMIT_ENABLED", "0")
+    monkeypatch.setenv("FRONTEND_DIST_DIR", str(TEST_FIXTURES_DIR / "no-dist"))
 
 
 @pytest.fixture()

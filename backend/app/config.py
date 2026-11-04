@@ -22,6 +22,8 @@ CORS_ORIGINS         comma-separated allowed origins (dev default: localhost:517
 CARBON_COUNTRY       grid intensity region for carbon estimates (default: China)
 DEFECTLENS_ENABLE_DOCS  serve /docs, /redoc and /openapi.json (default: 1;
                      set 0 in deployed containers — see docs/deployment.md)
+FRONTEND_DIST_DIR    built frontend directory to serve at "/"
+                     (default: <repo>/frontend/dist; skipped when absent)
 """
 
 from __future__ import annotations
@@ -45,6 +47,7 @@ class Settings:
     checkpoint_dir: Path
     metrics_path: Path
     samples_dir: Path
+    frontend_dist_dir: Path
     max_upload_mb: int = 5
     rate_limit_per_min: int = 20
     rate_limit_enabled: bool = True
@@ -85,6 +88,9 @@ class Settings:
             "metrics_path": path_env("METRICS_PATH", REPO_ROOT / "artifacts" / "metrics.json"),
             "samples_dir": path_env(
                 "SAMPLES_DIR", REPO_ROOT / "backend" / "app" / "assets" / "samples"
+            ),
+            "frontend_dist_dir": path_env(
+                "FRONTEND_DIST_DIR", REPO_ROOT / "frontend" / "dist"
             ),
             "max_upload_mb": int_env("MAX_UPLOAD_MB", 5),
             "rate_limit_per_min": int_env("RATE_LIMIT_PER_MIN", 20),
