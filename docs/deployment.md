@@ -49,12 +49,11 @@ ModelScope 创空间 Docker deployment (port 7860, 8 GB memory budget).
 
 - **Entrypoint**: gunicorn with uvicorn workers
   (`gunicorn --config /app/backend/gunicorn.conf.py app.asgi:app`),
-  **2 workers by default** (each worker holds its own torch runtime and
-  ONNX session cache; both fit in the 8 GB budget), overridable via
-  `WORKERS`. The worker-count trade-off from the recipe above still holds:
-  the slowapi limiter is in-memory per process, so per-client budgets scale
-  with the worker count — set `WORKERS=1` to restore the strict
-  single-process budget semantics.
+  **1 worker by default** (the slowapi limiter is in-memory per process,
+  so multiple workers would multiply per-client budgets; a single worker
+  also keeps torch runtime + ONNX session cache to one copy inside the
+  8 GB budget), overridable via `WORKERS`. Raise `WORKERS` only when a
+  shared rate-limit backend is configured.
 - **Port**: listens on `0.0.0.0:7860` (ModelScope Docker convention),
   overridable via `PORT`.
 - **Runtime user**: non-root (`app`, uid 10001); `/app` is read-only at
