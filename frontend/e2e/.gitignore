@@ -1,0 +1,3 @@
+# 本地运行产物（不提交；screenshots/ 是视觉回归基线，需要提交）
+playwright-report/
+test-results/
