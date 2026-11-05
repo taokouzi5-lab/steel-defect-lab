@@ -9,10 +9,11 @@
 
 ## 在线演示
 
-<!-- DEMO_LINK: replace after ModelScope deployment -->
+**立即体验：[taokouz1-defectlen.ms.show](https://taokouz1-defectlen.ms.show)**
 
-托管演示正在部署到 ModelScope 创空间。本段是演示链接的占位内容，部署完成后
-会替换为正式 URL。在此之前，请按[快速开始](#快速开始)在本地运行。
+托管于 ModelScope 创空间（免费 CPU 实例，2 vCPU / 8 GB）。闲置后首次访问
+需唤醒实例（冷启动约 30-90 秒），之后上传、Grad-CAM 热力图与碳成本读数全部
+运行在容器 CPU 上。空间主页：[modelscope.cn/studios/Taokouz1/defectlen](https://modelscope.cn/studios/Taokouz1/defectlen)。
 
 仓库地址：[github.com/taokouzi5-lab/steel-defect-lab](https://github.com/taokouzi5-lab/steel-defect-lab)
 

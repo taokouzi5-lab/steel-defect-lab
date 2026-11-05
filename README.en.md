@@ -9,11 +9,12 @@
 
 ## Live Demo
 
-<!-- DEMO_LINK: replace after ModelScope deployment -->
+**Try it now: [taokouz1-defectlen.ms.show](https://taokouz1-defectlen.ms.show)**
 
-The hosted demo is being deployed to ModelScope 创空间. This section is the
-placeholder for the demo URL and will be replaced after deployment. Until
-then, run the stack locally (see [Quick Start](#quick-start)).
+Hosted on ModelScope 创空间 (free CPU instance, 2 vCPU / 8 GB). The first
+request after an idle period wakes the instance (cold start, 30–90 s), then
+uploads, Grad-CAM heatmaps and carbon readouts all run on the container CPU.
+Space page: [modelscope.cn/studios/Taokouz1/defectlen](https://modelscope.cn/studios/Taokouz1/defectlen).
 
 Repository: [github.com/taokouzi5-lab/steel-defect-lab](https://github.com/taokouzi5-lab/steel-defect-lab)
 

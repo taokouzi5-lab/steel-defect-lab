@@ -3,10 +3,9 @@
 I build carbon-aware machine learning systems for manufacturing — measure the
 footprint first, then engineer it down.
 
-<!-- DEMO_LINK: replace after ModelScope deployment -->
-
-**Live demo:** the DefectLens demo is being deployed to ModelScope 创空间;
-this line is the placeholder for the URL and will be updated after deployment.
+**Live demo:** [taokouz1-defectlen.ms.show](https://taokouz1-defectlen.ms.show) —
+upload a steel surface image and get classification, Grad-CAM heatmaps and a
+per-inference carbon readout (ModelScope 创空间 free CPU instance).
 
 ## What I'm building
 
@@ -46,4 +45,4 @@ artifacts but no reliable CPU latency win.
 
 - MACE-F — [github.com/taokouzi5-lab/mace-f](https://github.com/taokouzi5-lab/mace-f)
 - DefectLens — [github.com/taokouzi5-lab/steel-defect-lab](https://github.com/taokouzi5-lab/steel-defect-lab)
-- DefectLens demo — placeholder, to be replaced after ModelScope deployment
+- DefectLens demo — [taokouz1-defectlen.ms.show](https://taokouz1-defectlen.ms.show)（[ModelScope space](https://modelscope.cn/studios/Taokouz1/defectlen)）
